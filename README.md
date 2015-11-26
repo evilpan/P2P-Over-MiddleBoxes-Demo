@@ -7,6 +7,6 @@ A simple demo of P2P communication over middle boxes such as NAT
     g++ -g -lboost_thread -lboost_system  server.cpp -o server
 
 ##run:
+
    ./server \[port\]
-   
    ./client \[host\] \[port\]
