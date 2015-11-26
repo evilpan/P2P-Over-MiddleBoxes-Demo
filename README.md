@@ -8,5 +8,5 @@ A simple demo of P2P communication over middle boxes such as NAT
 
 ##run:
 
-   ./server \[port\]
-   ./client \[host\] \[port\]
+    ./server \[port\]
+    ./client \[host\] \[port\]
