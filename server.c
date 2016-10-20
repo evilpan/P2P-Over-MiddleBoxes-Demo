@@ -1,7 +1,6 @@
 #include "utils.h"
 #include "server.h"
 #include <stdio.h>
-#include <stdlib.h>
 
 #include <string.h>
 #include <strings.h>
@@ -42,7 +41,6 @@ void on_client_connect(int client_fd)
             break;
         }
     }
-    list_client(g_clients);
 }
 void on_client_disconnect(int client_fd)
 {
@@ -57,21 +55,70 @@ void on_client_disconnect(int client_fd)
             free(temp);
         }
     }
-    list_client(g_clients);
 }
 void on_client_data(int client_fd, char *data, unsigned int size)
 {
     LOG_TRACE("Receive [%zd bytes] from client[%d]: %s",size, client_fd, data);
+    char *cmd = strtok(data, " ");
+    if(0 == strncmp(cmd, "LIST_REQUEST", 12))
+    {
+        char peer_list[1024] = {0};
+        list_client(client_fd, g_clients, peer_list);
+        LOG_TRACE("%s", peer_list);
+        send_to_client(client_fd, peer_list);
+
+    }
+    else if(0 == strncmp(cmd, "PUNCH_REQUEST", 13))
+    {
+        char *params = strtok(NULL, " ");
+        if(params == NULL)
+            LOG_ERROR("NO params for PUNCN_REQUEST");
+        else
+        {
+            int punch_id = atoi(params);
+            send_punch_request(client_fd, punch_id);
+        }
+    }
+}
+void send_punch_request(int from, int to)
+{
+    for(client_info_t *c = g_clients; c != NULL; c = c->next)
+    {
+        if(c->fd == from)
+        {
+            char request[128] = {0};
+            sprintf(request, "PUNCH_REQUEST %s:%d", c->ip, c->port);
+            send_to_client(to, request);
+            break;
+        }
+    }
+
+}
+void send_to_client(int client_fd, char *data)
+{
+    for(client_info_t *c = g_clients; c != NULL; c = c->next)
+    {
+        if(c->fd == client_fd)
+        {
+            write(client_fd, data, strlen(data));
+            return;
+        }
+    }
+    LOG_ERROR("No client[client_fd]");
 }
 
-void list_client(client_info_t *head)
+void list_client(int client_fd, client_info_t *head, char *peer_list)
 {
-    LOG_TRACE("Connected peer(s):");
     for(client_info_t *s = head; s != NULL; s = s->next)
     {
         if(s->fd != -1)
         {
-            LOG_TRACE("Peer %d %s:%d", s->fd, s->ip, s->port);
+            char peer[50] = {0};
+            if(s->fd == client_fd)
+                sprintf(peer, "[*]Peer %d %s:%d\n", s->fd, s->ip, s->port);
+            else
+                sprintf(peer, "Peer %d %s:%d\n", s->fd, s->ip, s->port);
+            strcat(peer_list, peer);
         }
     }
 }

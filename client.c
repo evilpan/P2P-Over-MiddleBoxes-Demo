@@ -13,60 +13,109 @@
 #include <errno.h>
 #include <sys/select.h>
 
-static peer_info_t   *g_servers;
-static peer_info_t   *g_peers;
+static remote_info_t G_Servers;
+static remote_info_t G_Peers;
 
 /* TODO: make those callbacks thread safe */
-void on_server_data(int sockfd, const char *buf, unsigned int read_size)
+void on_server_data(int serv_fd, char *buf, unsigned int read_size)
 {
-    LOG_TRACE("Receive %d bytes from server[%d].\n", read_size, sockfd);
+    LOG_TRACE("Receive %d bytes from server[%d].", read_size, serv_fd);
+    LOG_TRACE("%s", buf);
+    char *command = strtok(buf, " ");
+    if(0 == strncmp(command, "PUNCH_REQUEST", 12))
+    {
+        char *params = strtok(NULL, " ");
+        if(params == NULL)
+        {
+            LOG_ERROR("No params follow PUNCH_REQUEST");
+            return;
+        }
+        else
+        {
+            /* ex. params = 127.0.0.1:1234 */
+            do {
+                char *ip = strtok(params, ":");
+                if(ip == NULL) break;
+                char *str_port = strtok(NULL, ":");
+                if(str_port == NULL) break;
+                int port = atoi(str_port);
+                LOG_TRACE("Receive PUNCH_REQUEST from %s:%d", ip, port);
+                return ;
+
+            } while(false);
+            LOG_ERROR("Error PUNCH_REQUEST parameters");
+        }
+    }
 }
-void on_sever_connect(int serv_fd)
+void add_server(peer_info_t *head, int serv_fd)
 {
-    LOG_TRACE("Connected to server[%d].\n", serv_fd);
-    pthread_t *thread = (pthread_t *)malloc(sizeof(pthread_t));
-    pthread_create(thread, NULL, handle_server, serv_fd);
     peer_info_t *server;
     server = (peer_info_t *)malloc(sizeof(peer_info_t));
     server->fd = serv_fd;
-    server->handle_thread = thread;
     server->next = NULL;
-
-    for(peer_info_t *s = g_servers; s != NULL; s = s->next)
+    for(peer_info_t *s = head; s != NULL; s = s->next)
+    {
         if(s->next == NULL)
         {
             s->next = server;
+            G_Servers.peer_nums++;
             break;
         }
+    }
+    if(G_Servers.peer_nums == 1)
+    {
+        pthread_create(&G_Servers.handle_thread, NULL, handle_server, G_Servers.peer_head);
+    }
 }
-void on_server_disconnect(int serv_fd)
+void remove_server(peer_info_t *head, int serv_fd)
 {
-    LOG_TRACE("Disconnected from server[%d].\n", serv_fd);
-    close(serv_fd);
-
     /* delete peer_info */
     peer_info_t *server;
-    for(server = g_servers; server != NULL; server = server->next)
+    for(server = head; server != NULL; server = server->next)
     {
         if(server->next && server->next->fd == serv_fd)
         {
             peer_info_t *temp = server->next;
             server->next = temp->next;
             free(temp);
+            G_Servers.peer_nums--;
             break;
         }
     }
+}
+void on_sever_connect(int serv_fd)
+{
+    LOG_TRACE("Connected to server[%d].", serv_fd);
+    
+    add_server(G_Servers.peer_head, serv_fd);
+}
+void on_server_disconnect(int serv_fd)
+{
+    LOG_TRACE("Disconnected from server[%d].", serv_fd);
+    
+    remove_server(G_Servers.peer_head, serv_fd);
 }
 void list_server(const char *id)
 {
     if(id == NULL)
     {
-        LOG_TRACE("Current connected servers:\n");
-        for(peer_info_t *s = g_servers; s != NULL; s = s->next)
+        if(G_Servers.peer_nums > 0)
         {
-            if(s->fd != -1)
-                LOG_TRACE("server[%d]\n", s->fd);
+            LOG_TRACE("Current connected servers:");
+            for(peer_info_t *s = G_Servers.peer_head; s != NULL; s = s->next)
+            {
+                if(s->fd != -1)
+                    LOG_TRACE("server[%d]", s->fd);
+            }
         }
+        else
+            LOG_TRACE("No server connected.");
+    }
+    else
+    {
+        int serv_fd = atoi(id);
+        const char *request = "LIST_REQUEST";
+        send_to_serv(serv_fd, request);
     }
 }
 void print_help()
@@ -87,24 +136,38 @@ void print_help()
         "\n\n- quit: Quit the application.\n";
     LOG_TRACE("%s", help_message);
 }
-int send_to_peer(int peer_fd, const char *data)
-{
-    LOG_TRACE("Send to peer[%d]:%s\n", peer_fd, data);
-    return 0;
-}
 int punch_peer(int serv_fd, int peerid)
 {
-    int peer_fd = 0;
-    for(peer_info_t *s = g_servers; s != NULL; s = s->next)
+    char request[128] = {0};
+    sprintf(request, "PUNCH_REQUEST %d", peerid);
+    send_to_serv(serv_fd, request);
+    return 0;
+}
+int send_to_peer(int peer_fd, const char *data)
+{
+    for(peer_info_t *s = G_Peers.peer_head; s != NULL; s = s->next)
+    {
+        if(s->fd == peer_fd)
+        {
+            write(peer_fd, data, strlen(data));
+            return 0;
+        }
+    }
+    LOG_ERROR("Send Error : no such peer is punched.");
+    return 1;
+}
+int send_to_serv(int serv_fd, const char *data)
+{
+    for(peer_info_t *s = G_Servers.peer_head; s != NULL; s = s->next)
     {
         if(s->fd == serv_fd)
         {
-            write(serv_fd, "test test", 9);
-            LOG_TRACE("Punching ->server[%d]->peer[%d].\n", serv_fd, peerid);
-            break;
+            write(serv_fd, data, strlen(data));
+            return 0;
         }
     }
-    return peer_fd;
+    LOG_ERROR("Send Error : no such server is connected.");
+    return 1;
 }
 void run_console()
 {
@@ -127,14 +190,15 @@ void run_console()
             if(tokens[i] == NULL)
                 break;
             token_nums++;
-            //printf("%d : %s\n", i, tokens[i]);
+            //printf("%d : %s", i, tokens[i]);
         }
-        if((0 == strncmp(tokens[0], "list", 4)) && (token_nums < 2))
+        if((0 == strncmp(tokens[0], "list", 4)) && (token_nums < 3))
             list_server(tokens[1]);
         else if( (0 == strncmp(tokens[0], "connect", 7)) && (3 == token_nums) )
         {
             int serv_fd = connect_p2p_server(tokens[1], atoi(tokens[2]));
-            on_sever_connect(serv_fd);
+            if(serv_fd != -1)
+                on_sever_connect(serv_fd);
         }
         else if( (0 == strncmp(tokens[0], "punch", 5)) && (3 == token_nums) )
             punch_peer(atoi(tokens[1]), atoi(tokens[2]));
@@ -152,61 +216,82 @@ void run_console()
     }
     free(line);
 }
-void handle_server(int sockfd)
+void handle_server(peer_info_t* head)
 {
     struct timeval timeout;
     fd_set  rfds;
     int retval;
     char buf[RECV_BUFSIZE];
     
-    set_nonblocking(sockfd);
+    LOG_TRACE("Server handler begin...");
     while(true)
     {
+        int max_sockfd = 0;
         FD_ZERO(&rfds);
-        FD_SET(sockfd, &rfds);
-        timeout.tv_sec = 10;
-        timeout.tv_usec = 0;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 5000;
+        for(peer_info_t *s = head; s != NULL; s = s->next)
+        {
+            if(s->fd != -1)
+            {
+                int sockfd = s->fd;
+                set_nonblocking(sockfd);
+                FD_SET(sockfd, &rfds);
+                max_sockfd = max_sockfd > sockfd ? max_sockfd : sockfd;
+            }
+        }
+        if(max_sockfd == 0) break;
         
-        retval = select(sockfd+1, &rfds, NULL, NULL, &timeout); 
+        retval = select(max_sockfd+1, &rfds, NULL, NULL, &timeout); 
         if(retval == -1)
         {
             if(errno != EBADF)
-                LOG_ERROR("ERROR on select: %s\n", strerror(errno));
+                LOG_ERROR("ERROR on select: %s", strerror(errno));
             break;
         }
         else if(retval)
         {
-            /* should loop rfds but we have only one */
-            int read_size;
-            bool disconnected = false;
-            while(true)
+            /* loop rfds but we have only one */
+            for(peer_info_t *s = head; s != NULL; s = s->next)
             {
-                read_size = read(sockfd, buf, RECV_BUFSIZE);
-                if(read_size == -1)
+                if(s->fd == -1) continue;
+                if( !FD_ISSET(s->fd, &rfds) ) continue;
+                int sockfd = s->fd;
+                int read_size;
+                bool disconnected = false;
+                while(true)
                 {
-                    if(errno != EAGAIN)
+                    bzero(buf, RECV_BUFSIZE);
+                    read_size = read(sockfd, buf, RECV_BUFSIZE);
+                    if(read_size == -1)
+                    {
+                        if(errno != EAGAIN)
+                            disconnected = true;
+                        break;
+                    }
+                    else if(read_size == 0)
+                    {
+                        /* EOF */
                         disconnected = true;
-                    break;
+                        break;
+                    }
+                    else
+                    {
+                        on_server_data(sockfd, buf, read_size);
+                        continue;
+                    }
                 }
-                else if(read_size == 0)
+                if(disconnected)
                 {
-                    /* EOF */
-                    disconnected = true;
-                    break;
-                }
-                else
-                {
-                    on_server_data(sockfd, buf, read_size);
+                    close(sockfd);
+                    FD_CLR(sockfd, &rfds);
+                    on_server_disconnect(sockfd);
                     continue;
                 }
             }
-            if(disconnected)
-            {
-                on_server_disconnect(sockfd);
-                return;
-            }
         }
     }
+    LOG_TRACE("Server handler exit...");
 }
 int connect_p2p_server(const char *host, int port)
 {
@@ -218,7 +303,7 @@ int connect_p2p_server(const char *host, int port)
         sockfd = socket(AF_INET, SOCK_STREAM, 0);
         if(sockfd < 0)
         {
-            LOG_ERROR("ERROR opening socket\n");
+            LOG_ERROR("ERROR opening socket");
             break;
         }
 
@@ -226,7 +311,7 @@ int connect_p2p_server(const char *host, int port)
         if(!server)
         {
 
-            LOG_ERROR("ERROR: no such host\n");
+            LOG_ERROR("ERROR: no such host");
             close(sockfd);
             sockfd = -1;
             break;
@@ -242,7 +327,7 @@ int connect_p2p_server(const char *host, int port)
         if(connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
         {
             if( errno != EINPROGRESS) {
-                LOG_ERROR("ERROR: Failed to connect to %s:%d\n", host, port);
+                LOG_ERROR("ERROR: Failed to connect to %s:%d", host, port);
                 close(sockfd);
                 sockfd = -1;
                 break;
@@ -254,14 +339,18 @@ int connect_p2p_server(const char *host, int port)
 }
 int main()
 {
-    g_servers = (peer_info_t *)malloc(sizeof(peer_info_t));
-    g_peers = (peer_info_t *)malloc(sizeof(peer_info_t));
-    g_servers->fd = -1;
-    g_servers->handle_thread = NULL;
-    g_servers->next = NULL;
-    g_peers->fd = -1;
-    g_peers->handle_thread = NULL;
-    g_peers->next = NULL;
+    peer_info_t *serv_head = (peer_info_t *)malloc(sizeof(peer_info_t));
+    serv_head->fd = -1;
+    serv_head->next = NULL;
+    G_Servers.peer_head = serv_head;
+    G_Servers.peer_nums = 0;
+
+    peer_info_t *peer_head = (peer_info_t *)malloc(sizeof(peer_info_t));
+    peer_head->fd = -1;
+    peer_head->next = NULL;
+    G_Servers.peer_head = peer_head;
+    G_Servers.peer_nums = 0;
+
 
     run_console();
     return 0;
