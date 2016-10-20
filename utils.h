@@ -28,4 +28,8 @@ bool set_nonblocking(int sockfd)
     }
     return true;
 }
+
+#define LOG_ERROR(format, ...) fprintf(stderr, format"\n", ##__VA_ARGS__)
+#define LOG_TRACE(format, args...) fprintf(stdout, format"\n", ##args)
+
 #endif

@@ -6,27 +6,76 @@
 #include <string.h>
 #include <strings.h>
 
-#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/epoll.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <errno.h>
 #define MAX_EVENTS 64
+
+static client_info_t *g_clients;
 void on_client_connect(int client_fd)
 {
     /* new client is accepted */
-    fprintf(stdout, "Client[%d] is connected.\n", client_fd);
+    LOG_TRACE("Client[%d] is connected.", client_fd);
+    for(client_info_t *c = g_clients; c != NULL; c = c->next)
+    {
+        if(c->next == NULL)
+        {
+            struct sockaddr_in peer_addr;
+            socklen_t peer_addr_len = sizeof(peer_addr);
+            getpeername(client_fd, (struct sockaddr *)&peer_addr, &peer_addr_len);
+            char ipstr[INET6_ADDRSTRLEN];
+            int port;
+            
+            port = ntohs(peer_addr.sin_port);
+            inet_ntop(AF_INET, &peer_addr.sin_addr, ipstr, sizeof ipstr);
+
+            client_info_t *node = (client_info_t *)malloc(sizeof(client_info_t));
+            node->fd = client_fd;
+            sprintf(node->ip, "%s", ipstr);
+            node->port = port;
+            node->next = NULL;
+
+            c->next = node;
+            break;
+        }
+    }
+    list_client(g_clients);
 }
 void on_client_disconnect(int client_fd)
 {
-    fprintf(stdout, "Client[%d] is disconnected.\n", client_fd);
-    close(client_fd);
+    LOG_TRACE("Client[%d] is disconnected.", client_fd);
+    for(client_info_t *c = g_clients; c != NULL; c = c->next)
+    {
+        if(c->next && c->next->fd == client_fd)
+        {
+            close(client_fd);
+            client_info_t *temp = c->next;
+            c->next = temp->next;
+            free(temp);
+        }
+    }
+    list_client(g_clients);
 }
 void on_client_data(int client_fd, char *data, unsigned int size)
 {
-    fprintf(stdout, "Receive [%zd bytes] from client[%d]: %s\n",size, client_fd, data);
+    LOG_TRACE("Receive [%zd bytes] from client[%d]: %s",size, client_fd, data);
 }
+
+void list_client(client_info_t *head)
+{
+    LOG_TRACE("Connected peer(s):");
+    for(client_info_t *s = head; s != NULL; s = s->next)
+    {
+        if(s->fd != -1)
+        {
+            LOG_TRACE("Peer %d %s:%d", s->fd, s->ip, s->port);
+        }
+    }
+}
+
 void start_read(int connfd)
 {
     ssize_t read_size;
@@ -42,10 +91,10 @@ void start_read(int connfd)
             if (errno != EAGAIN)
             {
                 if(errno == EBADF)
-                    fprintf(stdout, "BAD socket, maybe the server has closed it.\n");
+                    LOG_TRACE("BAD socket, maybe the server has closed it.");
                 else
                 {
-                    fprintf(stderr, "ERROR on read client data. reason:%s\n", strerror(errno));
+                    LOG_ERROR("ERROR on read client data. reason:%s", strerror(errno));
                     disconnected = true;
                 }
             }
@@ -85,7 +134,7 @@ void start_accept(int listen_fd, int epoll_fd, struct epoll_event* pEvent)
                 break;
             }
             else {
-                fprintf(stderr, "ERROR: accept\n");
+                LOG_ERROR("ERROR: accept");
                 continue;
             }
         }
@@ -97,7 +146,7 @@ void start_accept(int listen_fd, int epoll_fd, struct epoll_event* pEvent)
         pEvent->data.fd = conn_sock;
         if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_sock, pEvent) == -1)
         {
-            fprintf(stderr, "epoll_ctl: conn_sock\n");
+            LOG_ERROR("epoll_ctl: conn_sock");
             close(conn_sock);
             continue;
         }
@@ -115,23 +164,23 @@ void start_receive(int listen_fd)
     set_nonblocking(listen_fd);
     epollfd = epoll_create(MAX_EVENTS);
     if(epollfd == -1) {
-        fprintf(stderr, "ERROR: epoll_create\n");
+        LOG_ERROR("ERROR: epoll_create");
         return ;
     }
     ev.data.fd = listen_fd;
     ev.events = EPOLLIN | EPOLLET;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_fd, &ev) == -1) {
-        fprintf(stderr, "epoll_ctl: listen_fd\n");
+        LOG_ERROR("epoll_ctl: listen_fd");
         return ;
     }
 
-    fprintf(stdout, "Start to receive incoming client(s)...\n");
+    LOG_TRACE("Start to receive incoming client(s)...");
     while(true)
     {
         int fd_nums;
         fd_nums = epoll_wait(epollfd, events, MAX_EVENTS, -1);
         if(fd_nums == -1){
-            fprintf(stderr, "ERROR: epoll_wait\n");
+            LOG_ERROR("ERROR: epoll_wait");
             break ;
         }
 
@@ -141,7 +190,7 @@ void start_receive(int listen_fd)
                     (events[i].events & EPOLLHUP) ||
                     (!events[i].events & EPOLLIN) )
             {
-                fprintf(stderr, "ERROR: epoll error\n");
+                LOG_ERROR("ERROR: epoll error");
                 close(events[i].data.fd);
                 continue;
             }
@@ -173,7 +222,7 @@ void start_server(const char *host, int port)
 
     listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     if(listen_fd < 0) {
-        fprintf(stderr, "ERROE opening socket");
+        LOG_ERROR("ERROE opening socket");
         return;
     }
     bzero((char *)&serv_addr, sizeof(serv_addr));
@@ -183,7 +232,7 @@ void start_server(const char *host, int port)
 
     if(bind(listen_fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
 
-        fprintf(stderr, "ERROR on binding\n");
+        LOG_ERROR("ERROR on binding");
         return;
     }
 
@@ -205,11 +254,19 @@ int main(int argc, char**argv)
     }
     else
     {
-        fprintf(stderr, "Usage: %s [host] port\n", argv[0]);
+        LOG_ERROR("Usage: %s [host] port", argv[0]);
         return 1;
     }
 
-    fprintf(stdout, "Server start listening on %s:%d \n", host, port);
+    /* init an empty client head node */
+    g_clients = (client_info_t *)malloc(sizeof(client_info_t));
+    g_clients->fd = -1;
+    g_clients->port = 0;
+    g_clients->next = NULL;
+
+    LOG_TRACE("Server start listening on %s:%d ", host, port);
     start_server(host, port);
+
+    free(g_clients);
     return 0;
 }

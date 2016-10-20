@@ -13,16 +13,17 @@
 #include <errno.h>
 #include <sys/select.h>
 
-peer_info_t   *g_servers;
-peer_info_t   *g_peers;
+static peer_info_t   *g_servers;
+static peer_info_t   *g_peers;
 
+/* TODO: make those callbacks thread safe */
 void on_server_data(int sockfd, const char *buf, unsigned int read_size)
 {
-    fprintf(stdout, "Receive %d bytes from server[%d].\n", read_size, sockfd);
+    LOG_TRACE("Receive %d bytes from server[%d].\n", read_size, sockfd);
 }
 void on_sever_connect(int serv_fd)
 {
-    fprintf(stdout, "Connected to server[%d].\n", serv_fd);
+    LOG_TRACE("Connected to server[%d].\n", serv_fd);
     pthread_t *thread = (pthread_t *)malloc(sizeof(pthread_t));
     pthread_create(thread, NULL, handle_server, serv_fd);
     peer_info_t *server;
@@ -31,21 +32,16 @@ void on_sever_connect(int serv_fd)
     server->handle_thread = thread;
     server->next = NULL;
 
-    if(!g_servers)
-        g_servers = server;
-    else
-    {
-        for(peer_info_t *s = g_servers; s != NULL; s = s->next)
-            if(s->next == NULL)
-            {
-                s->next = server;
-                break;
-            }
-    }
+    for(peer_info_t *s = g_servers; s != NULL; s = s->next)
+        if(s->next == NULL)
+        {
+            s->next = server;
+            break;
+        }
 }
 void on_server_disconnect(int serv_fd)
 {
-    fprintf(stdout, "Disconnected from server[%d].\n", serv_fd);
+    LOG_TRACE("Disconnected from server[%d].\n", serv_fd);
     close(serv_fd);
 
     /* delete peer_info */
@@ -65,10 +61,11 @@ void list_server(const char *id)
 {
     if(id == NULL)
     {
-        fprintf(stdout, "Current connected servers:\n");
+        LOG_TRACE("Current connected servers:\n");
         for(peer_info_t *s = g_servers; s != NULL; s = s->next)
         {
-            fprintf(stdout, "server[%d]\n", s->fd);
+            if(s->fd != -1)
+                LOG_TRACE("server[%d]\n", s->fd);
         }
     }
 }
@@ -88,17 +85,25 @@ void print_help()
         "\n\n- help:"
         "\n     Print this message."
         "\n\n- quit: Quit the application.\n";
-    fprintf(stdout, "%s", help_message);
+    LOG_TRACE("%s", help_message);
 }
 int send_to_peer(int peer_fd, const char *data)
 {
-    fprintf(stdout, "Send to peer[%d]:%s\n", peer_fd, data);
+    LOG_TRACE("Send to peer[%d]:%s\n", peer_fd, data);
     return 0;
 }
-int punch_peer(int serverfd, int peerid)
+int punch_peer(int serv_fd, int peerid)
 {
-    int peer_fd = 9;
-    fprintf(stdout, "Punching ->server[%d]->peer[%d].\n", serverfd, peerid);
+    int peer_fd = 0;
+    for(peer_info_t *s = g_servers; s != NULL; s = s->next)
+    {
+        if(s->fd == serv_fd)
+        {
+            write(serv_fd, "test test", 9);
+            LOG_TRACE("Punching ->server[%d]->peer[%d].\n", serv_fd, peerid);
+            break;
+        }
+    }
     return peer_fd;
 }
 void run_console()
@@ -106,7 +111,7 @@ void run_console()
     char *line = NULL;
     size_t len;
     ssize_t read;
-    while( (read = getline(&line, &len, stdin)) != -1)
+    while(printf(">>>") && (read = getline(&line, &len, stdin)) != -1)
     {
         if(read == 1)
             continue;
@@ -122,7 +127,7 @@ void run_console()
             if(tokens[i] == NULL)
                 break;
             token_nums++;
-            printf("%d : %s\n", i, tokens[i]);
+            //printf("%d : %s\n", i, tokens[i]);
         }
         if((0 == strncmp(tokens[0], "list", 4)) && (token_nums < 2))
             list_server(tokens[1]);
@@ -142,7 +147,7 @@ void run_console()
         else
             print_help();
 
-        printf(">>>");
+        ;
         continue;
     }
     free(line);
@@ -166,7 +171,7 @@ void handle_server(int sockfd)
         if(retval == -1)
         {
             if(errno != EBADF)
-                fprintf(stderr, "ERROR on select: %s\n", strerror(errno));
+                LOG_ERROR("ERROR on select: %s\n", strerror(errno));
             break;
         }
         else if(retval)
@@ -213,7 +218,7 @@ int connect_p2p_server(const char *host, int port)
         sockfd = socket(AF_INET, SOCK_STREAM, 0);
         if(sockfd < 0)
         {
-            fprintf(stderr, "ERROR opening socket\n");
+            LOG_ERROR("ERROR opening socket\n");
             break;
         }
 
@@ -221,7 +226,7 @@ int connect_p2p_server(const char *host, int port)
         if(!server)
         {
 
-            fprintf(stderr, "ERROR: no such host\n");
+            LOG_ERROR("ERROR: no such host\n");
             close(sockfd);
             sockfd = -1;
             break;
@@ -237,7 +242,7 @@ int connect_p2p_server(const char *host, int port)
         if(connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
         {
             if( errno != EINPROGRESS) {
-                fprintf(stderr, "ERROR: Failed to connect to %s:%d\n", host, port);
+                LOG_ERROR("ERROR: Failed to connect to %s:%d\n", host, port);
                 close(sockfd);
                 sockfd = -1;
                 break;
@@ -249,8 +254,15 @@ int connect_p2p_server(const char *host, int port)
 }
 int main()
 {
-    g_servers = NULL;
-    g_peers = NULL;
+    g_servers = (peer_info_t *)malloc(sizeof(peer_info_t));
+    g_peers = (peer_info_t *)malloc(sizeof(peer_info_t));
+    g_servers->fd = -1;
+    g_servers->handle_thread = NULL;
+    g_servers->next = NULL;
+    g_peers->fd = -1;
+    g_peers->handle_thread = NULL;
+    g_peers->next = NULL;
+
     run_console();
     return 0;
 }
