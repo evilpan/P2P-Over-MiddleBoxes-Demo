@@ -1,12 +1,6 @@
 #include "utils.h"
 #include "client.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <strings.h>
-
-#include <netinet/in.h>
 #include <netdb.h> 
 #include <sys/types.h>
 #include <unistd.h>
@@ -32,7 +26,7 @@ void on_server_data(int serv_fd, char *buf, unsigned int read_size)
         }
         else
         {
-            /* ex. params = 127.0.0.1:1234 */
+            /* ex. params = 192.168.1.1:52333 */
             do {
                 char *ip = strtok(params, ":");
                 if(ip == NULL) break;
@@ -40,6 +34,7 @@ void on_server_data(int serv_fd, char *buf, unsigned int read_size)
                 if(str_port == NULL) break;
                 int port = atoi(str_port);
                 LOG_TRACE("Receive PUNCH_REQUEST from %s:%d", ip, port);
+                udp_send(ip, port, "PONG", 4);
                 return ;
 
             } while(false);
@@ -127,21 +122,37 @@ void print_help()
         "\n     If no params specified, list connected server id(s)."
         "\n\n- connect [host] [port]:"
         "\n     Connect the new p2p server."
-        "\n\n- punch [server-id] [peer-id]:"
-        "\n     Send punch requet to [peer-id] which is connected to [server-id]."
-        "\n\n- sendmsg [peer-fd] [message]:"
+        "\n\n- punch [server-id] [host:port]:"
+        "\n     Send udp message to host:port(seen by server) as well as"
+        "\n     sending punch requet to peer through server."
+        "\n     For example:"
+        "\n         punch 5 192.168.1.110:52333"
+        "\n     This will get a tunnel over NAT(s) to 192.168.1.110:52333 if successed"
+        "\n\n- send [peer-fd] [message]:"
         "\n     Send [message] to [peer-fd] which is already punched."
         "\n\n- help:"
         "\n     Print this message."
         "\n\n- quit: Quit the application.\n";
     LOG_TRACE("%s", help_message);
 }
-int punch_peer(int serv_fd, int peerid)
+void punch_peer(int serv_fd, char *params)
 {
-    char request[128] = {0};
-    sprintf(request, "PUNCH_REQUEST %d", peerid);
-    send_to_serv(serv_fd, request);
-    return 0;
+    do {
+        /* send udp packet to peer*/
+        char *host = strtok(params, ":");
+        if(host == NULL) break;
+        char *s_port = strtok(NULL, ":");
+        if(s_port == NULL) break;
+        int port = atoi(s_port);
+        udp_send(host, port, "PING", 4);
+
+        /* send punch request to server */
+        char request[128] = {0};
+        sprintf(request, "PUNCH_REQUEST %s", params);
+        send_to_serv(serv_fd, request);
+
+    }while(false);
+
 }
 int send_to_peer(int peer_fd, const char *data)
 {
@@ -201,8 +212,8 @@ void run_console()
                 on_sever_connect(serv_fd);
         }
         else if( (0 == strncmp(tokens[0], "punch", 5)) && (3 == token_nums) )
-            punch_peer(atoi(tokens[1]), atoi(tokens[2]));
-        else if( (0 == strncmp(tokens[0], "sendmsg", 7)) && (3 == token_nums) )
+            punch_peer(atoi(tokens[1]), tokens[2]);
+        else if( (0 == strncmp(tokens[0], "send", 4)) && (3 == token_nums) )
             send_to_peer(atoi(tokens[1]), tokens[2]);
         else if( 0 == strncmp(tokens[0], "help", 4) )
             print_help();
@@ -229,7 +240,7 @@ void handle_server(peer_info_t* head)
         int max_sockfd = 0;
         FD_ZERO(&rfds);
         timeout.tv_sec = 0;
-        timeout.tv_usec = 5000;
+        timeout.tv_usec = 500 * 1000;
         for(peer_info_t *s = head; s != NULL; s = s->next)
         {
             if(s->fd != -1)
@@ -333,6 +344,30 @@ int connect_p2p_server(const char *host, int port)
                 break;
             }
         }
+    }while(false);
+
+    return sockfd;
+}
+
+int udp_send(const char *host, int port, const void *data, unsigned int size)
+{
+    struct sockaddr_in peer_addr;
+    int slen = sizeof(peer_addr);
+    bzero((void *)&peer_addr, slen);
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    do{
+        if(sockfd == -1) break;
+        peer_addr.sin_family = AF_INET;
+        peer_addr.sin_addr.s_addr = inet_addr(host);
+        peer_addr.sin_port = htons(port);
+        //if( bind(sockfd, (struct sockaddr *)&peer_addr, sizeof(peer_addr)) < 0 ) 
+        //{
+        //    LOG_ERROR("ERROR bind udp address");
+        //    sockfd = -1;
+        //    break;
+        //}
+        sendto(sockfd, data, size, MSG_DONTWAIT, (const struct sockaddr *)&peer_addr, slen);
+
     }while(false);
 
     return sockfd;

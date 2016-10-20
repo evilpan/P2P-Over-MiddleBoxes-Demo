@@ -8,9 +8,17 @@
 #endif
 
 #define RECV_BUFSIZE 1024
+#define LOG_ERROR(format, ...) fprintf(stderr, format"\n", ##__VA_ARGS__)
+#define LOG_TRACE(format, args...) fprintf(stdout, format"\n", ##args)
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
 
 #include <fcntl.h>
-#include <stdio.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 bool set_nonblocking(int sockfd)
 {
     int flags, s;
@@ -29,7 +37,5 @@ bool set_nonblocking(int sockfd)
     return true;
 }
 
-#define LOG_ERROR(format, ...) fprintf(stderr, format"\n", ##__VA_ARGS__)
-#define LOG_TRACE(format, args...) fprintf(stdout, format"\n", ##args)
 
 #endif

@@ -18,7 +18,7 @@ struct remote_info_t {
 
 int connect_p2p_server(const char *host, int port);
 void list_server(const char *id);
-int punch_peer(int serv_fd, int peerid);
+void punch_peer(int serv_fd, char *params);
 
 void on_server_data(int serv_fd, char *buf, unsigned int read_size);
 void on_sever_connect(int serv_fd);
@@ -30,5 +30,9 @@ int send_to_serv(int serv_fd, const char *data);
 void on_peer_data(int peer_id);
 int send_to_peer(int peer_fd, const char *data);
 void handle_peer(int peer_fd);
+
+
+/* return the fd */
+int udp_send(const char *host, int port, const void *data, unsigned int size);
 
 #endif

@@ -1,11 +1,5 @@
 #include "utils.h"
 #include "server.h"
-#include <stdio.h>
-
-#include <string.h>
-#include <strings.h>
-
-#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
@@ -65,7 +59,7 @@ void on_client_data(int client_fd, char *data, unsigned int size)
         char peer_list[1024] = {0};
         list_client(client_fd, g_clients, peer_list);
         LOG_TRACE("%s", peer_list);
-        send_to_client(client_fd, peer_list);
+        send_to_clientfd(client_fd, peer_list);
 
     }
     else if(0 == strncmp(cmd, "PUNCH_REQUEST", 13))
@@ -75,26 +69,43 @@ void on_client_data(int client_fd, char *data, unsigned int size)
             LOG_ERROR("NO params for PUNCN_REQUEST");
         else
         {
-            int punch_id = atoi(params);
-            send_punch_request(client_fd, punch_id);
+            send_punch_request(client_fd, params);
         }
     }
 }
-void send_punch_request(int from, int to)
+void send_punch_request(int from, char *to_host_port)
 {
+    char *host = strtok(to_host_port, ":");
+    if(host == NULL) return;
+    char *s_port = strtok(NULL, ":");
+    if(s_port == NULL) return;
+    int port = atoi(s_port);
     for(client_info_t *c = g_clients; c != NULL; c = c->next)
     {
         if(c->fd == from)
         {
             char request[128] = {0};
             sprintf(request, "PUNCH_REQUEST %s:%d", c->ip, c->port);
-            send_to_client(to, request);
+            send_to_client(host, port, request);
             break;
         }
     }
 
 }
-void send_to_client(int client_fd, char *data)
+void send_to_client(const char *host, int port, char *data)
+{
+    for(client_info_t *c = g_clients; c != NULL; c = c->next)
+    {
+        if( (0 == strcmp(host, c->ip)) && (c->port == port) )
+        {
+            write(c->fd, data, strlen(data));
+            return;
+        }
+    }
+    LOG_ERROR("No such client[%s:%d]", host, port);
+
+}
+void send_to_clientfd(int client_fd, char *data)
 {
     for(client_info_t *c = g_clients; c != NULL; c = c->next)
     {
@@ -272,7 +283,7 @@ void start_server(const char *host, int port)
         LOG_ERROR("ERROE opening socket");
         return;
     }
-    bzero((char *)&serv_addr, sizeof(serv_addr));
+    bzero((void *)&serv_addr, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = inet_addr(host);
     serv_addr.sin_port = htons(port);

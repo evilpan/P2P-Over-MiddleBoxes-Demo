@@ -13,8 +13,9 @@ struct client_info_t {
 void on_client_connect(int client_fd);
 void on_client_disconnect(int client_fd);
 void on_client_data(int client_fd, char *data, unsigned int size);
-void send_to_client(int client_fd, char *data);
-void send_punch_request(int from, int to);
+void send_to_clientfd(int client_fd, char *data);
+void send_to_client(const char *host, int port, char *data);
+void send_punch_request(int from, char *to_host_port);
 void list_client(int client_fd, client_info_t *head, char *peer_list);
 
 #endif
