@@ -34,7 +34,7 @@ void on_server_data(int serv_fd, char *buf, unsigned int read_size)
                 if(str_port == NULL) break;
                 int port = atoi(str_port);
                 LOG_TRACE("Receive PUNCH_REQUEST from %s:%d", ip, port);
-                udp_send(ip, port, "PONG", 4);
+                int peerfd = udp_send(ip, port, "PONG", 4);
                 return ;
 
             } while(false);
@@ -42,38 +42,34 @@ void on_server_data(int serv_fd, char *buf, unsigned int read_size)
         }
     }
 }
-void add_server(peer_info_t *head, int serv_fd)
+void add_node(remote_info_t *head, peer_info_t *server)
 {
-    peer_info_t *server;
-    server = (peer_info_t *)malloc(sizeof(peer_info_t));
-    server->fd = serv_fd;
-    server->next = NULL;
-    for(peer_info_t *s = head; s != NULL; s = s->next)
+    for(peer_info_t *s = head->peer_head; s != NULL; s = s->next)
     {
         if(s->next == NULL)
         {
             s->next = server;
-            G_Servers.peer_nums++;
+            head->peer_nums++;
             break;
         }
     }
-    if(G_Servers.peer_nums == 1)
+    if(head->peer_nums == 1)
     {
-        pthread_create(&G_Servers.handle_thread, NULL, handle_server, G_Servers.peer_head);
+        pthread_create(&G_Servers.handle_thread, NULL, handle_server, &G_Servers);
     }
 }
-void remove_server(peer_info_t *head, int serv_fd)
+void remove_node(remote_info_t *head, int serv_fd)
 {
     /* delete peer_info */
     peer_info_t *server;
-    for(server = head; server != NULL; server = server->next)
+    for(server = head->peer_head; server != NULL; server = server->next)
     {
         if(server->next && server->next->fd == serv_fd)
         {
             peer_info_t *temp = server->next;
             server->next = temp->next;
             free(temp);
-            G_Servers.peer_nums--;
+            head->peer_nums--;
             break;
         }
     }
@@ -81,14 +77,19 @@ void remove_server(peer_info_t *head, int serv_fd)
 void on_sever_connect(int serv_fd)
 {
     LOG_TRACE("Connected to server[%d].", serv_fd);
+
+    peer_info_t *server;
+    server = (peer_info_t *)malloc(sizeof(peer_info_t));
+    server->fd = serv_fd;
+    server->next = NULL;
     
-    add_server(G_Servers.peer_head, serv_fd);
+    add_node(&G_Servers, server);
 }
 void on_server_disconnect(int serv_fd)
 {
     LOG_TRACE("Disconnected from server[%d].", serv_fd);
     
-    remove_server(G_Servers.peer_head, serv_fd);
+    remove_node(&G_Servers, serv_fd);
 }
 void list_server(const char *id)
 {
@@ -144,12 +145,17 @@ void punch_peer(int serv_fd, char *params)
         char *s_port = strtok(NULL, ":");
         if(s_port == NULL) break;
         int port = atoi(s_port);
-        udp_send(host, port, "PING", 4);
+        int peer_fd = udp_send(host, port, "PING", 4);
 
         /* send punch request to server */
         char request[128] = {0};
-        sprintf(request, "PUNCH_REQUEST %s", params);
+        sprintf(request, "PUNCH_REQUEST %s:%d", host, port);
+        LOG_TRACE("Sending punch request to %s", request);
         send_to_serv(serv_fd, request);
+
+        /* receive PONG from peer */
+        udp_recv(peer_fd, host, port);
+
 
     }while(false);
 
@@ -201,7 +207,7 @@ void run_console()
             if(tokens[i] == NULL)
                 break;
             token_nums++;
-            //printf("%d : %s", i, tokens[i]);
+            //LOG_TRACE("params[%d]:%s", i, tokens[i]);
         }
         if((0 == strncmp(tokens[0], "list", 4)) && (token_nums < 3))
             list_server(tokens[1]);
@@ -227,8 +233,9 @@ void run_console()
     }
     free(line);
 }
-void handle_server(peer_info_t* head)
+void *handle_server(void* tcp_servers)
 {
+    remote_info_t *head = (remote_info_t *)tcp_servers;
     struct timeval timeout;
     fd_set  rfds;
     int retval;
@@ -241,7 +248,7 @@ void handle_server(peer_info_t* head)
         FD_ZERO(&rfds);
         timeout.tv_sec = 0;
         timeout.tv_usec = 500 * 1000;
-        for(peer_info_t *s = head; s != NULL; s = s->next)
+        for(peer_info_t *s = head->peer_head; s != NULL; s = s->next)
         {
             if(s->fd != -1)
             {
@@ -263,7 +270,7 @@ void handle_server(peer_info_t* head)
         else if(retval)
         {
             /* loop rfds but we have only one */
-            for(peer_info_t *s = head; s != NULL; s = s->next)
+            for(peer_info_t *s = head->peer_head; s != NULL; s = s->next)
             {
                 if(s->fd == -1) continue;
                 if( !FD_ISSET(s->fd, &rfds) ) continue;
@@ -303,6 +310,7 @@ void handle_server(peer_info_t* head)
         }
     }
     LOG_TRACE("Server handler exit...");
+    return NULL;
 }
 int connect_p2p_server(const char *host, int port)
 {
@@ -352,7 +360,7 @@ int connect_p2p_server(const char *host, int port)
 int udp_send(const char *host, int port, const void *data, unsigned int size)
 {
     struct sockaddr_in peer_addr;
-    int slen = sizeof(peer_addr);
+    socklen_t slen = sizeof(peer_addr);
     bzero((void *)&peer_addr, slen);
     int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     do{
@@ -368,9 +376,31 @@ int udp_send(const char *host, int port, const void *data, unsigned int size)
         //}
         sendto(sockfd, data, size, MSG_DONTWAIT, (const struct sockaddr *)&peer_addr, slen);
 
+
     }while(false);
 
     return sockfd;
+}
+int udp_recv(int sockfd, const char *host, int port)
+{
+    struct sockaddr_in peer_addr;
+    socklen_t slen = sizeof(peer_addr);
+    bzero((void *)&peer_addr, slen);
+    peer_addr.sin_family = AF_INET;
+    peer_addr.sin_addr.s_addr = inet_addr(host);
+    peer_addr.sin_port = htons(port);
+    char recv_buf[RECV_BUFSIZE] = {0};
+    ssize_t rd_size = recvfrom(sockfd, recv_buf, RECV_BUFSIZE, 0, (struct sockaddr*)&peer_addr, &slen);
+    if(rd_size == -1)
+        LOG_ERROR("Read error");
+    else
+        LOG_TRACE("Recv %ld bytes from peer:%s", rd_size, recv_buf);
+    return rd_size;
+}
+void *handle_peer(void *udp_peers)
+{
+    remote_info_t *head = (remote_info_t *)udp_peers;
+    return NULL;
 }
 int main()
 {
