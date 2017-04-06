@@ -83,7 +83,7 @@ int list2str(client_list *head, char *str)
     for (client_list *c = head->next; c != NULL;
             c = c->next)
     {
-        snprintf(buf, 23, "%s:%d ", c->client->ip, c->client->port);
+        snprintf(buf, 23, "(%s %d)", c->client->ip, c->client->port);
         //printf("one: %s\n", buf);
         strcat(str, buf);
         total ++;

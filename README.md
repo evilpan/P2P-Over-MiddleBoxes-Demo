@@ -7,5 +7,7 @@ A simple demo of P2P communication over middle boxes such as NAT
 
 ## run:
 
-    ./server [host] port
-    ./client
+    ./server host port
+
+    ./client host port
+    >>> help

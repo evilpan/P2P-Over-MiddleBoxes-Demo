@@ -41,7 +41,7 @@ void start_console(int clientfd)
     ssize_t read;
     endpoint server;
     bool logedin = false;
-    while(printf(">>>") && (read = getline(&line, &len, stdin)) != -1)
+    while(fprintf(stderr, ">>>") && (read = getline(&line, &len, stdin)) != -1)
     {
         if (read == 1)
             continue;
