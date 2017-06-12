@@ -1,2 +1,4 @@
 server
 client
+*.swo
+*.swp

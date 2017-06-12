@@ -1,422 +1,181 @@
-#include "utils.h"
-#include "client.h"
-
-#include <netdb.h> 
+#include <stdlib.h>
 #include <sys/types.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/select.h>
+#include <stdio.h>
+#include <string.h>
+#include <assert.h>
+#include <pthread.h>
 
-static remote_info_t G_Servers;
-static remote_info_t G_Peers;
+#include "common.h"
+extern const char* CMD[];
+int clientfd;
 
-/* TODO: make those callbacks thread safe */
-void on_server_data(int serv_fd, char *buf, unsigned int read_size)
-{
-    LOG_TRACE("Receive %d bytes from server[%d].", read_size, serv_fd);
-    LOG_TRACE("%s", buf);
-    char *command = strtok(buf, " ");
-    if(0 == strncmp(command, "PUNCH_REQUEST", 12))
-    {
-        char *params = strtok(NULL, " ");
-        if(params == NULL)
-        {
-            LOG_ERROR("No params follow PUNCH_REQUEST");
-            return;
-        }
-        else
-        {
-            /* ex. params = 192.168.1.1:52333 */
-            do {
-                char *ip = strtok(params, ":");
-                if(ip == NULL) break;
-                char *str_port = strtok(NULL, ":");
-                if(str_port == NULL) break;
-                int port = atoi(str_port);
-                LOG_TRACE("Receive PUNCH_REQUEST from %s:%d", ip, port);
-                int peerfd = udp_send(ip, port, "PONG", 4);
-                return ;
-
-            } while(false);
-            LOG_ERROR("Error PUNCH_REQUEST parameters");
-        }
-    }
-}
-void add_node(remote_info_t *head, peer_info_t *server)
-{
-    for(peer_info_t *s = head->peer_head; s != NULL; s = s->next)
-    {
-        if(s->next == NULL)
-        {
-            s->next = server;
-            head->peer_nums++;
-            break;
-        }
-    }
-    if(head->peer_nums == 1)
-    {
-        pthread_create(&G_Servers.handle_thread, NULL, handle_server, &G_Servers);
-    }
-}
-void remove_node(remote_info_t *head, int serv_fd)
-{
-    /* delete peer_info */
-    peer_info_t *server;
-    for(server = head->peer_head; server != NULL; server = server->next)
-    {
-        if(server->next && server->next->fd == serv_fd)
-        {
-            peer_info_t *temp = server->next;
-            server->next = temp->next;
-            free(temp);
-            head->peer_nums--;
-            break;
-        }
-    }
-}
-void on_sever_connect(int serv_fd)
-{
-    LOG_TRACE("Connected to server[%d].", serv_fd);
-
-    peer_info_t *server;
-    server = (peer_info_t *)malloc(sizeof(peer_info_t));
-    server->fd = serv_fd;
-    server->next = NULL;
-    
-    add_node(&G_Servers, server);
-}
-void on_server_disconnect(int serv_fd)
-{
-    LOG_TRACE("Disconnected from server[%d].", serv_fd);
-    
-    remove_node(&G_Servers, serv_fd);
-}
-void list_server(const char *id)
-{
-    if(id == NULL)
-    {
-        if(G_Servers.peer_nums > 0)
-        {
-            LOG_TRACE("Current connected servers:");
-            for(peer_info_t *s = G_Servers.peer_head; s != NULL; s = s->next)
-            {
-                if(s->fd != -1)
-                    LOG_TRACE("server[%d]", s->fd);
-            }
-        }
-        else
-            LOG_TRACE("No server connected.");
-    }
-    else
-    {
-        int serv_fd = atoi(id);
-        const char *request = "LIST_REQUEST";
-        send_to_serv(serv_fd, request);
-    }
-}
 void print_help()
 {
     const char *help_message = ""
         "Usage:"
-        "\n\n- list [ID|all]:"
-        "\n     List available peer(s) of connected p2p server ID,"
-        "\n     If no params specified, list connected server id(s)."
-        "\n\n- connect [host] [port]:"
-        "\n     Connect the new p2p server."
-        "\n\n- punch [server-id] [host:port]:"
-        "\n     Send udp message to host:port(seen by server) as well as"
-        "\n     sending punch requet to peer through server."
+        "\n\n login [host] [port]"
+        "\n     Login to p2p server."
+        "\n\n logout"
+        "\n     Logout from p2p server."
+        "\n\n list"
+        "\n     List all logged peer(s) of server"
+        "\n\n punch [host] [port]"
+        "\n     Send punch request directly to host:port(seen by server)"
+        "\n     and the same time, send punch requet to server to be relayed."
         "\n     For example:"
-        "\n         punch 5 192.168.1.110:52333"
+        "\n         punch 192.168.1.110 52333"
         "\n     This will get a tunnel over NAT(s) to 192.168.1.110:52333 if successed"
-        "\n\n- send [peer-fd] [message]:"
-        "\n     Send [message] to [peer-fd] which is already punched."
-        "\n\n- help:"
+        "\n\n send [host] [port] [message]:"
+        "\n     Send [message] to peer which is already punched."
+        "\n\n help:"
         "\n     Print this message."
-        "\n\n- quit: Quit the application.\n";
-    LOG_TRACE("%s", help_message);
+        "\n\n quit: Quit the application.\n";
+    printf("%s\n", help_message);
 }
-void punch_peer(int serv_fd, char *params)
-{
-    do {
-        /* send udp packet to peer*/
-        char *host = strtok(params, ":");
-        if(host == NULL) break;
-        char *s_port = strtok(NULL, ":");
-        if(s_port == NULL) break;
-        int port = atoi(s_port);
-        int peer_fd = udp_send(host, port, "PING", 4);
-
-        /* send punch request to server */
-        char request[128] = {0};
-        sprintf(request, "PUNCH_REQUEST %s:%d", host, port);
-        LOG_TRACE("Sending punch request to %s", request);
-        send_to_serv(serv_fd, request);
-
-        /* receive PONG from peer */
-        udp_recv(peer_fd, host, port);
 
 
-    }while(false);
-
-}
-int send_to_peer(int peer_fd, const char *data)
-{
-    for(peer_info_t *s = G_Peers.peer_head; s != NULL; s = s->next)
-    {
-        if(s->fd == peer_fd)
-        {
-            write(peer_fd, data, strlen(data));
-            return 0;
-        }
-    }
-    LOG_ERROR("Send Error : no such peer is punched.");
-    return 1;
-}
-int send_to_serv(int serv_fd, const char *data)
-{
-    for(peer_info_t *s = G_Servers.peer_head; s != NULL; s = s->next)
-    {
-        if(s->fd == serv_fd)
-        {
-            write(serv_fd, data, strlen(data));
-            return 0;
-        }
-    }
-    LOG_ERROR("Send Error : no such server is connected.");
-    return 1;
-}
-void run_console()
+void start_console(int clientfd)
 {
     char *line = NULL;
     size_t len;
     ssize_t read;
-    while(printf(">>>") && (read = getline(&line, &len, stdin)) != -1)
+    endpoint server;
+    bool logedin = false;
+    while(fprintf(stderr, ">>>") && (read = getline(&line, &len, stdin)) != -1)
     {
-        if(read == 1)
+        if (read == 1)
             continue;
-        char *tokens[3] = {NULL};
+        enum { MAX_DELIMS = 4 }; /* enum hack */
+        char *tokens[MAX_DELIMS] = {NULL};
         int token_nums = 0;
-        for(int i = 0; i < 3; i++)
+        for (int i = 0; i < MAX_DELIMS; i++)
         {
-            if(i == 0)
+            if (i == 0)
                 tokens[i] = strtok(line, " ");
             else
-                tokens[i] = strtok(NULL, " ");
+            {
+                if (i == MAX_DELIMS - 1)
+                    tokens[i] = strtok(NULL, "");
+                else
+                    tokens[i] = strtok(NULL, " ");
+            }
 
-            if(tokens[i] == NULL)
+            if (tokens[i] == NULL)
                 break;
             token_nums++;
             //LOG_TRACE("params[%d]:%s", i, tokens[i]);
         }
-        if((0 == strncmp(tokens[0], "list", 4)) && (token_nums < 3))
-            list_server(tokens[1]);
-        else if( (0 == strncmp(tokens[0], "connect", 7)) && (3 == token_nums) )
+        if ( (0 == strncmp(tokens[0], "login", 5)) && (3 == token_nums) )
         {
-            int serv_fd = connect_p2p_server(tokens[1], atoi(tokens[2]));
-            if(serv_fd != -1)
-                on_sever_connect(serv_fd);
+            strncpy(server.ip, tokens[1], strlen(tokens[1]) + 1 );
+            server.port = atoi(tokens[2]);
+            LOG_TRACE("login to %s:%d", server.ip, server.port);
+            udp_send(clientfd, &server, CMD[LOGIN]);
+            logedin = true;
         }
-        else if( (0 == strncmp(tokens[0], "punch", 5)) && (3 == token_nums) )
-            punch_peer(atoi(tokens[1]), tokens[2]);
-        else if( (0 == strncmp(tokens[0], "send", 4)) && (3 == token_nums) )
-            send_to_peer(atoi(tokens[1]), tokens[2]);
-        else if( 0 == strncmp(tokens[0], "help", 4) )
-            print_help();
-        else if( 0 == strncmp(tokens[0], "quit", 4) )
-            break;
-        else
-            print_help();
+        else if ( (0 == strncmp(tokens[0], "logout", 6)) )
+        {
+            if (logedin) {
+                udp_send(clientfd, &server, CMD[LOGOUT]);
+                logedin = false;
+            }
+            else
+                LOG_TRACE("you need to login first");
 
-        ;
+        }
+        else if ((0 == strncmp(tokens[0], "list", 4)))
+        {
+            if (logedin)
+                udp_send(clientfd, &server, CMD[LIST]);
+            else
+                LOG_TRACE("you need to login first");
+        }
+        else if ( (0 == strncmp(tokens[0], "punch", 5)) && (3 == token_nums) )
+        {
+            if (logedin) {
+
+                endpoint peer;
+                strncpy(peer.ip, tokens[1], sizeof(peer.ip));
+                peer.port = atoi(tokens[2]);
+                udp_send(clientfd, &peer, "anything");
+
+                char command[40] = {};
+                snprintf(command, 40, "%s %s %s", CMD[PUNCH], tokens[1], tokens[2]);
+                udp_send(clientfd, &server, command);
+            }
+            else
+                LOG_TRACE("you need to login first");
+        }
+        else if ( (0 == strncmp(tokens[0], "send", 4) && (4 == token_nums) ) )
+        {
+            endpoint peer;
+            strncpy(peer.ip, tokens[1], strlen(tokens[1]) + 1 );
+            peer.port = atoi(tokens[2]);
+            udp_send(clientfd, &peer, tokens[3]);
+            LOG_TRACE("send to (%s:%d):%s", peer.ip, peer.port, tokens[3]);
+        }
+        else if ((0 == strncmp(tokens[0], "quit", 4))) {
+            if (logedin) 
+                udp_send(clientfd, &server, CMD[LOGOUT]);
+            break;
+        }
+        else
+        {
+            print_help();
+        }
+
         continue;
     }
     free(line);
 }
-void *handle_server(void* tcp_servers)
+
+void on_message(const endpoint *from, char *data)
 {
-    remote_info_t *head = (remote_info_t *)tcp_servers;
-    struct timeval timeout;
-    fd_set  rfds;
-    int retval;
-    char buf[RECV_BUFSIZE];
-    
-    LOG_TRACE("Server handler begin...");
-    while(true)
-    {
-        int max_sockfd = 0;
-        FD_ZERO(&rfds);
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 500 * 1000;
-        for(peer_info_t *s = head->peer_head; s != NULL; s = s->next)
-        {
-            if(s->fd != -1)
-            {
-                int sockfd = s->fd;
-                set_nonblocking(sockfd);
-                FD_SET(sockfd, &rfds);
-                max_sockfd = max_sockfd > sockfd ? max_sockfd : sockfd;
-            }
-        }
-        if(max_sockfd == 0) break;
-        
-        retval = select(max_sockfd+1, &rfds, NULL, NULL, &timeout); 
-        if(retval == -1)
-        {
-            if(errno != EBADF)
-                LOG_ERROR("ERROR on select: %s", strerror(errno));
-            break;
-        }
-        else if(retval)
-        {
-            /* loop rfds but we have only one */
-            for(peer_info_t *s = head->peer_head; s != NULL; s = s->next)
-            {
-                if(s->fd == -1) continue;
-                if( !FD_ISSET(s->fd, &rfds) ) continue;
-                int sockfd = s->fd;
-                int read_size;
-                bool disconnected = false;
-                while(true)
-                {
-                    bzero(buf, RECV_BUFSIZE);
-                    read_size = read(sockfd, buf, RECV_BUFSIZE);
-                    if(read_size == -1)
-                    {
-                        if(errno != EAGAIN)
-                            disconnected = true;
-                        break;
-                    }
-                    else if(read_size == 0)
-                    {
-                        /* EOF */
-                        disconnected = true;
-                        break;
-                    }
-                    else
-                    {
-                        on_server_data(sockfd, buf, read_size);
-                        continue;
-                    }
-                }
-                if(disconnected)
-                {
-                    close(sockfd);
-                    FD_CLR(sockfd, &rfds);
-                    on_server_disconnect(sockfd);
-                    continue;
-                }
-            }
+    LOG_TRACE("(%s:%d): %s", from->ip, from->port, data);
+
+    char *cmd = strtok(data, " ");
+    if (strcmp(cmd, CMD[SYN]) == 0) {
+        char *peer_ip = strtok(NULL, " ");
+        char *peer_port = strtok(NULL, " ");
+        if(peer_ip && peer_port) {
+            endpoint ep;
+            strncpy(ep.ip, peer_ip, sizeof(ep.ip));
+            ep.port = atoi(peer_port);
+            udp_send(clientfd, &ep, CMD[ACK]);
         }
     }
-    LOG_TRACE("Server handler exit...");
-    return NULL;
+
 }
-int connect_p2p_server(const char *host, int port)
-{
+struct arguments {
     int sockfd;
-    struct sockaddr_in serv_addr;
-    struct hostent *server;
-
-    do{
-        sockfd = socket(AF_INET, SOCK_STREAM, 0);
-        if(sockfd < 0)
-        {
-            LOG_ERROR("ERROR opening socket");
-            break;
-        }
-
-        server = gethostbyname(host);
-        if(!server)
-        {
-
-            LOG_ERROR("ERROR: no such host");
-            close(sockfd);
-            sockfd = -1;
-            break;
-        }
-        bzero((char *) &serv_addr, sizeof(serv_addr));
-        serv_addr.sin_family = AF_INET;
-        serv_addr.sin_port = htons(port);
-        bcopy((char*)server->h_addr_list[0],
-                (char*)&serv_addr.sin_addr.s_addr,
-                server->h_length);
-
-        //set_nonblocking(sockfd);
-        if(connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
-        {
-            if( errno != EINPROGRESS) {
-                LOG_ERROR("ERROR: Failed to connect to %s:%d", host, port);
-                close(sockfd);
-                sockfd = -1;
-                break;
-            }
-        }
-    }while(false);
-
-    return sockfd;
-}
-
-int udp_send(const char *host, int port, const void *data, unsigned int size)
+    msg_callback *on_message;
+};
+void *start_server_daemon(void *args)
 {
-    struct sockaddr_in peer_addr;
-    socklen_t slen = sizeof(peer_addr);
-    bzero((void *)&peer_addr, slen);
-    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    do{
-        if(sockfd == -1) break;
-        peer_addr.sin_family = AF_INET;
-        peer_addr.sin_addr.s_addr = inet_addr(host);
-        peer_addr.sin_port = htons(port);
-        //if( bind(sockfd, (struct sockaddr *)&peer_addr, sizeof(peer_addr)) < 0 ) 
-        //{
-        //    LOG_ERROR("ERROR bind udp address");
-        //    sockfd = -1;
-        //    break;
-        //}
-        sendto(sockfd, data, size, MSG_DONTWAIT, (const struct sockaddr *)&peer_addr, slen);
-
-
-    }while(false);
-
-    return sockfd;
-}
-int udp_recv(int sockfd, const char *host, int port)
-{
-    struct sockaddr_in peer_addr;
-    socklen_t slen = sizeof(peer_addr);
-    bzero((void *)&peer_addr, slen);
-    peer_addr.sin_family = AF_INET;
-    peer_addr.sin_addr.s_addr = inet_addr(host);
-    peer_addr.sin_port = htons(port);
-    char recv_buf[RECV_BUFSIZE] = {0};
-    ssize_t rd_size = recvfrom(sockfd, recv_buf, RECV_BUFSIZE, 0, (struct sockaddr*)&peer_addr, &slen);
-    if(rd_size == -1)
-        LOG_ERROR("Read error");
-    else
-        LOG_TRACE("Recv %ld bytes from peer:%s", rd_size, recv_buf);
-    return rd_size;
-}
-void *handle_peer(void *udp_peers)
-{
-    remote_info_t *head = (remote_info_t *)udp_peers;
+    struct arguments *as = args;
+    start_udp_server(as->sockfd, as->on_message);
     return NULL;
 }
-int main()
+
+int main(int argc, char *argv[])
 {
-    peer_info_t *serv_head = (peer_info_t *)malloc(sizeof(peer_info_t));
-    serv_head->fd = -1;
-    serv_head->next = NULL;
-    G_Servers.peer_head = serv_head;
-    G_Servers.peer_nums = 0;
+    if (argc != 3) {
+        LOG_TRACE("Usage: %s host port", argv[0]);
+        return 1;
+    }
+    clientfd = create_udp_socket(argv[1], atoi(argv[2]));
+    assert( clientfd != -1);
 
-    peer_info_t *peer_head = (peer_info_t *)malloc(sizeof(peer_info_t));
-    peer_head->fd = -1;
-    peer_head->next = NULL;
-    G_Servers.peer_head = peer_head;
-    G_Servers.peer_nums = 0;
+    struct arguments args;
+    args.sockfd = clientfd;
+    args.on_message = on_message;
+    pthread_t pid;
+    if (0 == pthread_create(&pid, NULL, start_server_daemon ,&args) ) {
+        LOG_TRACE("client listenning on %s:%s", argv[1], argv[2]);
+    } else {
+        return -1;
+    }
 
+    start_console(clientfd);
 
-    run_console();
-    return 0;
 }
