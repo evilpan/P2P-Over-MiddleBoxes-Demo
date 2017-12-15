@@ -31,7 +31,8 @@ struct endpoint {
     int port;
 };
 typedef void msg_callback(const endpoint *from, char *data);
-int create_udp_socket(const char *ip, int port);
+int create_tcp_socket(const char *ip, int port);
+int create_udp_socket();
 //data is NULL terminated
 int udp_send(int sockfd, const endpoint *dest, const char *data);
 int udp_receive(int sockfd, endpoint *from, char *data);

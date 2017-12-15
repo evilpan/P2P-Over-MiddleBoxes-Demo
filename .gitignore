@@ -2,3 +2,6 @@ server
 client
 *.swo
 *.swp
+tests/test_list
+tests/udp_server
+tests/udp_client

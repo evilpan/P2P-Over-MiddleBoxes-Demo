@@ -41,7 +41,7 @@ void start_console(int clientfd)
     ssize_t read;
     endpoint server;
     bool logedin = false;
-    while(fprintf(stderr, ">>>") && (read = getline(&line, &len, stdin)) != -1)
+    while(fprintf(stderr, ">>> ") && (read = getline(&line, &len, stdin)) != -1)
     {
         if (read == 1)
             continue;
@@ -157,25 +157,18 @@ void *start_server_daemon(void *args)
     return NULL;
 }
 
-int main(int argc, char *argv[])
+int main()
 {
-    if (argc != 3) {
-        LOG_TRACE("Usage: %s host port", argv[0]);
-        return 1;
-    }
-    clientfd = create_udp_socket(argv[1], atoi(argv[2]));
+    clientfd = create_udp_socket();
     assert( clientfd != -1);
 
     struct arguments args;
     args.sockfd = clientfd;
     args.on_message = on_message;
     pthread_t pid;
-    if (0 == pthread_create(&pid, NULL, start_server_daemon ,&args) ) {
-        LOG_TRACE("client listenning on %s:%s", argv[1], argv[2]);
-    } else {
+    if (0 != pthread_create(&pid, NULL, start_server_daemon ,&args) ) {
         return -1;
     }
-
     start_console(clientfd);
 
 }

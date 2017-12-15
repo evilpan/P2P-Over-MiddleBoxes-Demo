@@ -14,7 +14,7 @@ const char *CMD[] = {
     "ACK"
 };
 
-int create_udp_socket(const char *ip, int port)
+int create_tcp_socket(const char *bind_addr, int bind_port)
 {
     int success = 0; 
     int sockfd = -1;
@@ -22,14 +22,14 @@ int create_udp_socket(const char *ip, int port)
     socklen_t slen = sizeof(addr);
     memset(&addr, 0, slen);
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr(ip);
-    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = inet_addr(bind_addr);
+    addr.sin_port = htons(bind_port);
     do {
-        sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        sockfd = socket(AF_INET, SOCK_STREAM, 0);
         if(sockfd == -1) break;
         if( bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0 ) {
             LOG_ERROR("Failed to bind %s:%d",
-                    ip, port);
+                    bind_addr, bind_port);
             break;
         }
         success = 1;
@@ -40,6 +40,9 @@ int create_udp_socket(const char *ip, int port)
         sockfd = -1;
     }
     return sockfd;
+}
+int create_udp_socket() {
+    return socket(AF_INET, SOCK_DGRAM, 0);
 }
 int udp_send(int sockfd, const endpoint *dest, const char *data)
 {
