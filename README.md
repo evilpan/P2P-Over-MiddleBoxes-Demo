@@ -51,4 +51,4 @@ to forward messages. You can test it by using the utils(`udp_server/udp_client`)
 
 # related post (in Chinese)
 
-[https://www.pppan.net/2015/10/31/p2p-over-middle-box/](https://www.pppan.net/2015/10/31/p2p-over-middle-box/)
+[https://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/](http://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/)
