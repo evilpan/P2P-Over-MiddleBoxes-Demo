@@ -3,5 +3,5 @@ client
 *.swo
 *.swp
 tests/test_list
-tests/udp_server
-tests/udp_client
+tools/udp_server
+tools/udp_client
