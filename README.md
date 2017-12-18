@@ -22,8 +22,7 @@ There're tools for manually check the external NAT's type in [tools](tools).
 For example:
 
 - 1) cd tools && make
-- 2.a) run `nc -u -lvp 2222` and `nc -u -lvp 3333` on your public server.
-- 2.b) if you don't have nc(netcat) on your server, run `tools/udp_server <port>` instead.
+- 2) run `tools/udp_server 2222` and `tools/udp_server 3333` on your public server.
 - 3) run `tools/udp_client` on your client
 - 4) (`udp_client`) sendto server:2222 text
 - 5) (`udp_client`) sendto server:3333 text
@@ -51,4 +50,8 @@ to forward messages. You can test it by using the utils(`udp_server/udp_client`)
 
 # related post (in Chinese)
 
-[https://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/](http://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/)
+- [https://www.pppan.net/blog/detail/2017-12-16-p2p-over-middle-box][django]
+- [http://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/][jekyll]
+
+[jekyll]:http://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/
+[django]:https://www.pppan.net/blog/detail/2017-12-16-p2p-over-middle-box
