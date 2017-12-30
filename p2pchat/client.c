@@ -16,14 +16,24 @@ void *keepalive_loop();
 void *receive_loop();
 void *console_loop();
 
+static void quit() {
+    quiting = 1;
+}
+
 void *keepalive_loop() {
     Message ping;
     ping.head.magic = MSG_MAGIC;
     ping.head.type = MTYPE_PING;
     ping.head.length = 0;
     ping.body = NULL;
+    unsigned int i = 0;
     while(!quiting) {
-        sleep(PING_INTERVAL);
+        // quit ASAP
+        if (i++ < PING_INTERVAL) {
+            sleep(1);
+            continue;
+        }
+        i = 0;
         udp_send_msg(g_clientfd, g_server, ping);
         for (eplist_t *ep = g_peers->next; ep != NULL; ep = ep->next) {
             udp_send_msg(g_clientfd, ep->endpoint, ping);
@@ -148,7 +158,7 @@ void *console_loop() {
             print_help();
         } else if (strncmp(cmd, "quit", 4) == 0) {
             udp_send_text(g_clientfd, g_server, MTYPE_LOGOUT, NULL);
-            quiting = 1;
+            quit();
             break;
         } else {
             printf("Unknown command %s\n", cmd);
@@ -173,6 +183,7 @@ int main(int argc, char **argv)
     g_server = ep_fromstring(argv[1]);
     g_peers = eplist_create();
     g_clientfd = socket(AF_INET, SOCK_DGRAM, 0);
+    log_info("setting server to %s", ep_tostring(g_server));
     if (g_clientfd == -1) { perror("socket"); goto clean; }
     ret = pthread_create(&keepalive_pid, NULL, &keepalive_loop, NULL);
     if (ret != 0) { perror("keepalive"); goto clean; }
