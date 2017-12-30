@@ -1,4 +1,4 @@
-This p2pchat demo is based on custom (UDP)protocol, and works only when
+This p2pchat demo is based on UDP protocol, and works only when
 
-1) both peers are behind `Full Cone NAT`
-2) or behind the same `Restrict Cone NAT` which supports `loopback transmission`
+1) both of peers are behind `Full Cone NAT` or `(Address) Restrict Cone NAT`.
+2) if both peers are behind the same NAT, then this NAT must support `loopback transmission` to forward message.

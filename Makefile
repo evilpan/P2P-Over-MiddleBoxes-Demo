@@ -6,7 +6,7 @@ p2pchat:
 	$(MAKE) -C p2pchat
 test:
 	$(MAKE) -C p2pchat/tests
-tools:
+tool:
 	$(MAKE) -C tools
 
 clean: 
