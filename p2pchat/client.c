@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <sys/select.h>
 #include <pthread.h>
+#include <assert.h>
 #include "logging.h"
 #include "message.h"
 #include "endpoint.h"
@@ -82,7 +84,26 @@ void *receive_loop() {
     endpoint_t peer;
     socklen_t addrlen;
     char buf[RECV_BUFSIZE];
+    int nfds;
+    fd_set readfds;
+    struct timeval timeout;
+
+    nfds = g_clientfd + 1;
     while(!quiting) {
+        FD_ZERO(&readfds);
+        FD_SET(g_clientfd, &readfds);
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+        int ret = select(nfds, &readfds, NULL, NULL, &timeout);
+        if (ret == 0) {
+            /* timeout */
+            continue;
+        }
+        else if (ret == -1) {
+            perror("select");
+            continue;
+        }
+        assert(FD_ISSET(g_clientfd, &readfds));
         addrlen = sizeof(peer);
         memset(&peer, 0, addrlen);
         memset(buf, 0, RECV_BUFSIZE);
