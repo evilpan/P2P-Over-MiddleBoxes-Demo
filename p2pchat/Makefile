@@ -1,4 +1,4 @@
-CFLAGS := -g  -Wall -Wno-implicit-function-declaration
+CFLAGS := -g -std=c99 -Wall -Wno-implicit-function-declaration
 TARGETS := server client
 all: $(TARGETS)
 
