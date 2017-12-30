@@ -4,7 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define TUPLE_LEN INET_ADDRSTRLEN + 5
+#define INET_PORTSTRLEN 5
+#define TUPLE_LEN (INET_ADDRSTRLEN + INET_PORTSTRLEN + 1)
 int ep_equal(endpoint_t lp, endpoint_t rp) {
     return ( (lp.sin_family == rp.sin_family) &&
         (lp.sin_addr.s_addr == rp.sin_addr.s_addr) &&
