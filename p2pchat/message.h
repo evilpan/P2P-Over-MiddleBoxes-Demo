@@ -42,8 +42,8 @@ struct _Message {
 };
 
 const char *strmtype(MessageType type);
-int msg_serialize(Message msg, char *buf, unsigned int bufsize);
-Message msg_deserialize(const char *buf, unsigned int bufsize);
+int msg_pack(Message msg, char *buf, unsigned int bufsize);
+Message msg_unpack(const char *buf, unsigned int bufsize);
 
 // replay a Message
 int udp_send_msg(int sock, endpoint_t peer, Message msg);

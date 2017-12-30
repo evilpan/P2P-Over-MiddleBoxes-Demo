@@ -19,7 +19,7 @@ const char *strmtype(MessageType type) {
 }
 
 /* return bytes serialized */
-int msg_serialize(Message msg, char *buf, unsigned int bufsize) {
+int msg_pack(Message msg, char *buf, unsigned int bufsize) {
     if (bufsize < MSG_HEADLEN + msg.head.length) {
         printf("buf too small");
         return 0;
@@ -42,7 +42,7 @@ int msg_serialize(Message msg, char *buf, unsigned int bufsize) {
 /*
    Message body is a pointer to buf + len(head)
 */
-Message msg_deserialize(const char *buf, unsigned int buflen) {
+Message msg_unpack(const char *buf, unsigned int buflen) {
     Message m;
     memset(&m, 0, sizeof(m));
     if (buflen < MSG_HEADLEN) {
@@ -71,7 +71,7 @@ Message msg_deserialize(const char *buf, unsigned int buflen) {
 // send a Message
 int udp_send_msg(int sock, endpoint_t peer, Message msg) {
     char buf[SEND_BUFSIZE] = {0};
-    int wt_size = msg_serialize(msg, buf, SEND_BUFSIZE);
+    int wt_size = msg_pack(msg, buf, SEND_BUFSIZE);
     return sendto(sock, buf, wt_size,
             MSG_DONTWAIT, (struct sockaddr *)&peer, sizeof(peer));
 }

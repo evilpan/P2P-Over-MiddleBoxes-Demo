@@ -34,7 +34,7 @@ void udp_receive_loop(int listen_sock, callback_t callback)
             log_info("EOF from %s", ep_tostring(peer));
             continue;
         }
-        Message msg = msg_deserialize(buf, rd_size);
+        Message msg = msg_unpack(buf, rd_size);
         if (msg.head.magic != MSG_MAGIC || msg.body == NULL) {
             log_warn("Invalid message(%d bytes): {0x%x,%d,%d} %p", rd_size,
                     msg.head.magic, msg.head.type, msg.head.length, msg.body);
@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
         printf("Usage: %s <port>\n", argv[0]);
         return 1;
     }
-    const char *host = "127.0.0.1";
+    const char *host = "0.0.0.0";
     int port = atoi(argv[1]);
     int ret;
     endpoint_t server = ep_frompair(host, port);

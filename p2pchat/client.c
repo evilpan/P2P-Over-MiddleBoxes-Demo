@@ -54,8 +54,8 @@ void on_message(endpoint_t from, Message msg) {
             case MTYPE_PUNCH:
                 { 
                     endpoint_t peer = ep_fromstring(msg.body); 
-                    log_info("%s is calling", msg.body);
-                    udp_send_text(g_clientfd, peer, MTYPE_PING, NULL);
+                    log_info("%s on call, replying...", ep_tostring(peer));
+                    udp_send_text(g_clientfd, peer, MTYPE_REPLY, NULL);
                 }
                 break;
             case MTYPE_REPLY:
@@ -69,11 +69,19 @@ void on_message(endpoint_t from, Message msg) {
     // from peer
     switch (msg.head.type) {
         case MTYPE_TEXT:
-            log_info("Peer[%s]: %s", ep_tostring(from), msg.body);
+            log_info("Peer(%s): %s", ep_tostring(from), msg.body);
             break;
         case MTYPE_REPLY:
-            log_info("Peer[%s] reply our punch requst, les's talk now");
+            log_info("Peer(%s) replied, you can talk now", ep_tostring(from));
             eplist_add(g_peers, from);
+        case MTYPE_PUNCH:
+            /*
+             * Usually we can't recevie punch request from other peer directly,
+             * but it could happen when it come after we reply the punch request from server,
+             * or there's a tunnel already.
+             * */
+            udp_send_text(g_clientfd, from, MTYPE_TEXT, "I SEE YOU");
+            break;
         case MTYPE_PING:
             udp_send_text(g_clientfd, from, MTYPE_PONG, NULL);
         default:
@@ -116,7 +124,7 @@ void *receive_loop() {
             log_info("EOF from %s", ep_tostring(peer));
             continue;
         }
-        Message msg = msg_deserialize(buf, rd_size);
+        Message msg = msg_unpack(buf, rd_size);
         if (msg.head.magic != MSG_MAGIC || msg.body == NULL) {
             log_warn("Invalid message(%d bytes): {0x%x,%d,%d} %p", rd_size,
                     msg.head.magic, msg.head.type, msg.head.length, msg.body);
@@ -136,7 +144,7 @@ static void print_help()
         "\n     login to server so that other peer(s) can see you"
         "\n\n logout"
         "\n     logout from server"
-        "\n\n ls"
+        "\n\n list"
         "\n     list logined peers"
         "\n\n punch host:port"
         "\n     punch a hole through UDP to [host:port]"
@@ -169,7 +177,10 @@ void *console_loop() {
         } else if (strncmp(cmd, "logout", 5) == 0) {
             udp_send_text(g_clientfd, g_server, MTYPE_LOGOUT, NULL);
         } else if (strncmp(cmd, "punch", 5) == 0) {
-            char *host_port = strtok(NULL, " ");
+            char *host_port = strtok(NULL, "\n");
+            endpoint_t peer = ep_fromstring(host_port);
+            log_info("punching %s", ep_tostring(peer));
+            udp_send_text(g_clientfd, peer, MTYPE_PUNCH, NULL);
             udp_send_text(g_clientfd, g_server, MTYPE_PUNCH, host_port);
         } else if (strncmp(cmd, "send", 4) == 0) {
             char *host_port = strtok(NULL, " ");
