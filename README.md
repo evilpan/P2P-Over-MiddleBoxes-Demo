@@ -3,21 +3,25 @@ A simple demo of P2P communication over middle boxes such as NAT
 
 ## compile:
     
-    make
+    make p2pchat
 
 ## run:
 
-    ./server host port
+    ./p2pchat/server port
 
-    ./client
+    ./p2pchat/client
     >>> help
+
+## test:
+
+    make test
 
 # FAQ
 
 ## It doesn't work 
-UDP hole punching works only if both of the peers' NAT types are `Cone NAT`.
+UDP hole punching works only if both of the peers' NAT types are `Full Cone NAT`.
 
-## How to check whether my NAT is cone NAT
+## How to verify whether my NAT is cone NAT
 There're tools for manually check the external NAT's type in [tools](tools).
 For example:
 
@@ -50,8 +54,11 @@ to forward messages. You can test it by using the utils(`udp_server/udp_client`)
 
 # related post (in Chinese)
 
-- [https://www.pppan.net/blog/detail/2017-12-16-p2p-over-middle-box][django]
-- [http://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/][jekyll]
+- [https://www.pppan.net/blog/detail/2017-12-16-p2p-over-middle-box(up to date)][django]
+- [http://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/(original post)][jekyll]
+
+> NOTE: This is just a proof of concept project. If you want to build a stable
+> P2P application, please refer to STUN/TURN and ICE protocol as well.
 
 [jekyll]:http://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/
 [django]:https://www.pppan.net/blog/detail/2017-12-16-p2p-over-middle-box

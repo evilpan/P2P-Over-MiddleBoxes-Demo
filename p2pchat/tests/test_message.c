@@ -40,6 +40,5 @@ int main()
 {
     test_mtype();
     test_msg();
-    printf("%f", 1.2f);
     return 0;
 }

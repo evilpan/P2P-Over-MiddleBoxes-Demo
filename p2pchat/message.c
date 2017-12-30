@@ -88,5 +88,6 @@ int udp_send_buf(int sock, endpoint_t peer,
 // send a NULL terminated text
 int udp_send_text(int sock, endpoint_t peer,
         MessageType type, const char *text) {
-    return udp_send_buf(sock, peer, type, text, strlen(text));
+    unsigned int len = text == NULL ? 0 : strlen(text);
+    return udp_send_buf(sock, peer, type, text, len);
 }

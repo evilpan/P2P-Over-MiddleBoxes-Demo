@@ -15,7 +15,7 @@ eplist_t *g_client_pool;
 
 void udp_receive_loop(int listen_sock, callback_t callback)
 {
-    struct sockaddr_in peer;
+    endpoint_t peer;
     socklen_t addrlen;
     char buf[RECV_BUFSIZE];
     for(;;) {
@@ -34,13 +34,13 @@ void udp_receive_loop(int listen_sock, callback_t callback)
             log_info("EOF from %s", ep_tostring(peer));
             continue;
         }
-        Message m = msg_deserialize(buf, rd_size);
-        if (m.head.magic != MSG_MAGIC || m.body == NULL) {
+        Message msg = msg_deserialize(buf, rd_size);
+        if (msg.head.magic != MSG_MAGIC || msg.body == NULL) {
             log_warn("Invalid message(%d bytes): {0x%x,%d,%d} %p", rd_size,
-                    m.head.magic, m.head.type, m.head.length, m.body);
+                    msg.head.magic, msg.head.type, msg.head.length, msg.body);
             continue;
         }
-        callback(listen_sock, peer, m);
+        callback(listen_sock, peer, msg);
         continue;
 
     }
@@ -93,7 +93,7 @@ void on_message(int sock, endpoint_t from, Message msg) {
             }
             break;
         case MTYPE_PING:
-            udp_send_text(sock, from, MTYPE_PONG, "");
+            udp_send_text(sock, from, MTYPE_PONG, NULL);
             break;
         case MTYPE_PONG:
             break;
@@ -104,11 +104,11 @@ void on_message(int sock, endpoint_t from, Message msg) {
 }
 
 int main(int argc, char **argv) {
+    log_setlevel(DEBUG);
     if (argc != 2) {
         printf("Usage: %s <port>\n", argv[0]);
         return 1;
     }
-    log_setlevel(DEBUG);
     const char *host = "127.0.0.1";
     int port = atoi(argv[1]);
     int ret;

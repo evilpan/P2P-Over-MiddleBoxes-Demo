@@ -14,7 +14,7 @@
    -------------+-----------+---------------------+---------------+
 */
 #define SEND_BUFSIZE 1024
-#define RECV_BUFSIZE 512
+#define RECV_BUFSIZE 1024
 typedef enum _MessageType MessageType;
 typedef struct _Message Message;
 typedef struct _MessageHead MessageHead;

@@ -1,0 +1,162 @@
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include "logging.h"
+#include "message.h"
+#include "endpoint.h"
+#include "endpoint_list.h"
+#define PING_INTERVAL 10
+
+static int quiting = 0;
+static int g_clientfd;
+static endpoint_t g_server;
+static eplist_t *g_peers;
+void *keepalive_loop();
+void *receive_loop();
+void *console_loop();
+
+void on_message(endpoint_t from, Message msg) {
+    log_debug("RECV %d bytes FROM %s: %s %s", msg.head.length,
+            ep_tostring(from), strmtype(msg.head.type), msg.body);
+}
+
+int main(int argc, char **argv)
+{
+    log_setlevel(DEBUG);
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s server:port\n", argv[0]);
+        return 1;
+    }
+    int ret;
+    pthread_t keepalive_pid, receive_pid, console_pid;
+
+    g_server = ep_fromstring(argv[1]);
+    g_peers = eplist_create();
+    g_clientfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (g_clientfd == -1) { perror("socket"); goto clean; }
+    ret = pthread_create(&keepalive_pid, NULL, &keepalive_loop, NULL);
+    if (ret != 0) { perror("keepalive"); goto clean; }
+    ret = pthread_create(&receive_pid, NULL, &receive_loop, NULL);
+    if (ret != 0) { perror("receive"); goto clean; }
+    ret = pthread_create(&console_pid, NULL, &console_loop, NULL);
+    if (ret != 0) { perror("console"); goto clean; }
+
+    pthread_join(console_pid, NULL);
+    pthread_join(receive_pid, NULL);
+    pthread_join(keepalive_pid, NULL);
+clean:
+    close(g_clientfd);
+    eplist_destroy(g_peers);
+    return 0;
+}
+
+void *keepalive_loop() {
+    Message ping;
+    ping.head.magic = MSG_MAGIC;
+    ping.head.type = MTYPE_PING;
+    ping.head.length = 0;
+    ping.body = NULL;
+    while(!quiting) {
+        sleep(PING_INTERVAL);
+        udp_send_msg(g_clientfd, g_server, ping);
+        for (eplist_t *ep = g_peers->next; ep != NULL; ep = ep->next) {
+            udp_send_msg(g_clientfd, ep->endpoint, ping);
+        }
+    }
+    log_info("quiting keepalive_loop");
+    return NULL;
+}
+void *receive_loop() {
+    endpoint_t peer;
+    socklen_t addrlen;
+    char buf[RECV_BUFSIZE];
+    while(!quiting) {
+        addrlen = sizeof(peer);
+        memset(&peer, 0, addrlen);
+        memset(buf, 0, RECV_BUFSIZE);
+        int rd_size;
+        /* UDP isn't a "stream" protocol. once you do the initial recvfrom,
+           the remainder of the packet is discarded */
+        rd_size = recvfrom(g_clientfd, buf, RECV_BUFSIZE, 0,
+                (struct sockaddr*)&peer, &addrlen);
+        if (rd_size == -1) {
+            perror("recvfrom");
+            continue;
+        } else if (rd_size == 0) {
+            log_info("EOF from %s", ep_tostring(peer));
+            continue;
+        }
+        Message msg = msg_deserialize(buf, rd_size);
+        if (msg.head.magic != MSG_MAGIC || msg.body == NULL) {
+            log_warn("Invalid message(%d bytes): {0x%x,%d,%d} %p", rd_size,
+                    msg.head.magic, msg.head.type, msg.head.length, msg.body);
+            continue;
+        }
+        on_message(peer, msg);
+    }
+    log_info("quiting receive_loop");
+    return NULL;
+}
+
+static void print_help()
+{
+    const static char *help_message = ""
+        "Usage:"
+        "\n\n login"
+        "\n     login to server so that other peer(s) can see you"
+        "\n\n logout"
+        "\n     logout from server"
+        "\n\n ls"
+        "\n     list logined peers"
+        "\n\n punch host:port"
+        "\n     punch a hole through UDP to [host:port]"
+        "\n     host:port must have been logged in to server"
+        "\n     Example:"
+        "\n     >>> punch 9.8.8.8:53"
+        "\n\n send host:port data"
+        "\n     send [data] to peer [host:port] through UDP protocol"
+        "\n     the other peer could receive your message if UDP hole punching successed"
+        "\n     Example:"
+        "\n     >>> send 8.8.8.8:53 hello"
+        "\n\n help"
+        "\n     print this help message"
+        "\n\n quit"
+        "\n     logout and quit this program";
+    printf("%s\n", help_message);
+}
+void *console_loop() {
+    char *line = NULL;
+    size_t len;
+    ssize_t read;
+    while(fprintf(stdout, ">>> ") && (read = getline(&line, &len, stdin)) != -1) {
+        if (read == 1) continue;
+        char *cmd = strtok(line, " ");
+        if (strncmp(cmd, "ls", 2) == 0) {
+            udp_send_text(g_clientfd, g_server, MTYPE_LIST, NULL);
+        } else if (strncmp(cmd, "login", 5) == 0) {
+            udp_send_text(g_clientfd, g_server, MTYPE_LOGIN, NULL);
+        } else if (strncmp(cmd, "logout", 5) == 0) {
+            udp_send_text(g_clientfd, g_server, MTYPE_LOGOUT, NULL);
+        } else if (strncmp(cmd, "punch", 5) == 0) {
+            char *host_port = strtok(NULL, " ");
+            udp_send_text(g_clientfd, g_server, MTYPE_PUNCH, host_port);
+        } else if (strncmp(cmd, "send", 4) == 0) {
+            char *host_port = strtok(NULL, " ");
+            char *data = strtok(NULL, " ");
+            udp_send_text(g_clientfd, ep_fromstring(host_port), MTYPE_TEXT, data);
+        } else if (strncmp(cmd, "help", 4) == 0) {
+            print_help();
+        } else if (strncmp(cmd, "quit", 4) == 0) {
+            udp_send_text(g_clientfd, g_server, MTYPE_LOGOUT, NULL);
+            quiting = 1;
+            break;
+        } else {
+            printf("Unknown command %s\n", cmd);
+            print_help();
+        }
+    }
+    free(line);
+    log_info("quiting console_loop");
+    return NULL;
+}
