@@ -55,10 +55,10 @@ void on_message(int sock, endpoint_t from, Message msg) {
             {
                 if (0 == eplist_add(g_client_pool, from)) {
                     log_info("%s logged in", ep_tostring(from));
-                    udp_send_text(sock, from, MTYPE_TEXT, "Login success");
+                    udp_send_text(sock, from, MTYPE_REPLY, "Login success!");
                 } else {
                     log_warn("%s failed to login", ep_tostring(from));
-                    udp_send_text(sock, from, MTYPE_TEXT, "Login failed");
+                    udp_send_text(sock, from, MTYPE_REPLY, "Login failed");
                 }
             }
             break;
@@ -66,10 +66,10 @@ void on_message(int sock, endpoint_t from, Message msg) {
             {
                 if (0 == eplist_remove(g_client_pool, from)) {
                     log_info("%s logged out", ep_tostring(from));
-                    udp_send_text(sock, from, MTYPE_TEXT, "Logout success");
+                    udp_send_text(sock, from, MTYPE_REPLY, "Logout success");
                 } else {
                     log_info("%s failed to logout", ep_tostring(from));
-                    udp_send_text(sock, from, MTYPE_TEXT, "Logout failed");
+                    udp_send_text(sock, from, MTYPE_REPLY, "Logout failed");
                 }
             }
             break;
@@ -78,6 +78,7 @@ void on_message(int sock, endpoint_t from, Message msg) {
                 log_info("%s quering list", ep_tostring(from));
                 char text[SEND_BUFSIZE - MSG_HEADLEN] = {0};
                 for (eplist_t *c = g_client_pool->next; c != NULL; c = c->next) {
+                    if (ep_equal(c->endpoint, from)) strcat(text, "(you)");
                     strcat(text, ep_tostring(c->endpoint));
                     if (c->next) strcat(text, ";");
                 }
@@ -89,7 +90,7 @@ void on_message(int sock, endpoint_t from, Message msg) {
                 endpoint_t other = ep_fromstring(msg.body);
                 log_info("punching to %s", ep_tostring(other));
                 udp_send_text(sock, other, MTYPE_PUNCH, ep_tostring(from));
-                udp_send_text(sock, from, MTYPE_TEXT, "punch ok");
+                udp_send_text(sock, from, MTYPE_TEXT, "punch request sent");
             }
             break;
         case MTYPE_PING:
