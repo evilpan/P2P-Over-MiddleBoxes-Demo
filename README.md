@@ -9,7 +9,7 @@ A simple demo of P2P communication over middle boxes such as NAT
 
     ./p2pchat/server port
 
-    ./p2pchat/client
+    ./p2pchat/client server:port
     >>> help
 
 ## test:
@@ -49,7 +49,7 @@ recv 4 bytes from [172.16.47.71:14781]: text
 For cone NAT, the `from` part should be the same.
 
 ## My NAT is cone NAT, but it still doesn't work
-If your two peers are behind the same NAT, this NAT must support `LOOPBACK TRANSMISSION`
+If two of your peers are both behind the same NAT, this NAT must support `LOOPBACK TRANSMISSION`
 to forward messages. You can test it by using the utils(`udp_server/udp_client`) in [tools](tools)
 
 # related post (in Chinese)
