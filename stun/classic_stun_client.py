@@ -140,9 +140,6 @@ class Message(object):
         return '{}: [{}]'.format(self.header,
                 ','.join(map(str, self.attributes)))
 
-class StunTimeout(Exception):
-    pass
-
 class TestResult(object):
     def __init__(self):
         self.timeout = True
@@ -163,18 +160,18 @@ def test_I(sock, stun_server):
         return result
     response = Message.from_bytes(data)
     logging.debug('RECV: {}'.format(response))
-    result.timeout = False
     for attr in response.attributes:
         if attr.type is AttributeType.MAPPED_ADDRESS:
             result.ip, result.port = attr.address
             break
+    result.timeout = False
     return result
 
 def test_II(sock, stun_server):
     logging.info('running test II')
     result = TestResult()
     binding_request = Message(header=StunHeader(type=MessageType.BINDING_REQUEST))
-    change = StunAttribute.change_request(False, True)
+    change = StunAttribute.change_request(True, True)
     binding_request.attributes.append(change)
     logging.debug('SEND: {}'.format(binding_request))
     sock.sendto(binding_request.to_bytes(), stun_server)
@@ -188,14 +185,14 @@ def test_II(sock, stun_server):
         if attr.type is AttributeType.MAPPED_ADDRESS:
             result.ip, result.port = attr.address
             break
+    result.timeout = False
     return result
 
 def test_III(sock, stun_server):
     logging.info('running test III')
     result = TestResult()
-    result = TestResult()
     binding_request = Message(header=StunHeader(type=MessageType.BINDING_REQUEST))
-    change = StunAttribute.change_request(True, True)
+    change = StunAttribute.change_request(False, True)
     binding_request.attributes.append(change)
     logging.debug('SEND: {}'.format(binding_request))
     sock.sendto(binding_request.to_bytes(), stun_server)
@@ -209,10 +206,11 @@ def test_III(sock, stun_server):
         if attr.type is AttributeType.MAPPED_ADDRESS:
             result.ip, result.port = attr.address
             break
+    result.timeout = False
     return result
 
 def test_nat(sock, stun_server, local_ip='', local_port=0):
-    # Please 
+    # Please refer to the README
     source = (local_ip, local_port)
     ret = test_I(sock, stun_server)
     if ret.timeout:
@@ -237,12 +235,19 @@ def test_nat(sock, stun_server, local_ip='', local_port=0):
     else:
         return NAT.ADDR_RISTRICT
 
+STUN_SERVERS = [
+    ('stun.ekiga.net', 3478),
+    ('stun.ideasip.com', 3478),
+    ('stun.softjoys.com', 3478),
+    ('stun.voipbuster.com', 3478),
+    ]
+
 def main():
     logging.basicConfig(level=logging.INFO)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(2.0)
-    ntype = test_nat(sock, ('stun.ekiga.net', 3478))
-    print('Your NAT type is: ' + ntype.value)
+    sock.settimeout(3.0)
+    ntype = test_nat(sock, STUN_SERVERS[1])
+    print('NAT_TYPE: ' + ntype.value)
 
 if __name__ == '__main__':
     main()

@@ -37,6 +37,17 @@ cd stun
 python3 classic_stun_client.py
 ```
 
+And the result would be similar with:
+```
+INFO:root:running test I
+INFO:root:MAPPED_ADDRESS: 220.181.57.217:45816
+INFO:root:running test II
+INFO:root:running test I
+INFO:root:MAPPED_ADDRESS: 220.181.57.217:45816
+INFO:root:running test III
+NAT_TYPE: Port Rristrict NAT
+```
+
 ## My NAT is cone NAT, but it still doesn't work
 If two of your peers are both behind the same NAT, this NAT must support `LOOPBACK TRANSMISSION`
 to forward messages. You can test it by using the utils(`udp_server/udp_client`) in [tools](tools)
