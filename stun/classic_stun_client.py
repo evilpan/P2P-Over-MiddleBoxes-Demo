@@ -179,12 +179,13 @@ def get_changed_address(message):
     for attr in message.attributes:
         if attr.type is AttributeType.CHANGED_ADDRESS:
             return attr.address
-def test_nat(sock, stun_server, local_address=None):
+def test_nat(sock, stun_server, local_ip='0.0.0.0'):
     # Please refer to the README
     resp = test_I(sock, stun_server)
     if resp is None:
         return NAT.UDP_BLOCKED
     local_address = sock.getsockname()
+    local_address[0] = local_ip
     logging.info('local address is {}:{}'.format(local_address[0], local_address[1]))
     m1 = get_mapped_address(resp)
     changed_address = get_changed_address(resp)
@@ -211,6 +212,7 @@ def test_nat(sock, stun_server, local_address=None):
         return NAT.ADDR_RISTRICT
 
 STUN_SERVERS = [
+    ('stun.pppan.net', 3478),
     ('stun.ekiga.net', 3478),
     ('stun.ideasip.com', 3478),
     ('stun.voipbuster.com', 3478),
@@ -221,7 +223,7 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(3.0)
     # choose the fastest stun server to you
-    ntype = test_nat(sock, STUN_SERVERS[2])
+    ntype = test_nat(sock, STUN_SERVERS[0])
     print('NAT_TYPE: ' + ntype.value)
 
 if __name__ == '__main__':
