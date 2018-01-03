@@ -1,6 +1,11 @@
-#!/bin/sh
+#!/bin/bash
 
 testcases=$(find p2pchat/tests -type f -name "test_*" -executable)
+if test -z $testcase;then
+    echo "No test found. Please run \`make test' first"
+    exit 1
+fi
+
 echo "Collected $(wc -l <<< $testcases) tests"
 passed=0
 failed=0

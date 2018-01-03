@@ -39,8 +39,8 @@ class NAT(Enum):
     SYMMETRIC_UDP_FIREWALL = 'Firewall that allows UDP out, and responses have to come back to the source of the request'
     FULL_CONE = 'Full Cone NAT'
     SYMMETRIC = 'Symmetric NAT'
-    PORT_RISTRICT  = 'Port Rristrict NAT'
-    ADDR_RISTRICT  = '(Address) Rristrict NAT'
+    PORT_RISTRICT  = 'Port Rristrict Cone NAT'
+    ADDR_RISTRICT  = '(Address) Rristrict Cone NAT'
 
 class StunHeader(object):
     """ 20 bytes header """
@@ -152,7 +152,6 @@ def send_and_recv(sock, stun_server, request):
     logging.debug('RECV: {}'.format(response))
     return response
 
-
 def test_I(sock, stun_server):
     logging.info('running test I   with {}:{}'.format(stun_server[0], stun_server[1]))
     binding_request = Message(header=StunHeader(type=MessageType.BINDING_REQUEST))
@@ -180,28 +179,30 @@ def get_changed_address(message):
     for attr in message.attributes:
         if attr.type is AttributeType.CHANGED_ADDRESS:
             return attr.address
-def test_nat(sock, stun_server, local_ip='', local_port=0):
+def test_nat(sock, stun_server, local_address=None):
     # Please refer to the README
-    source = (local_ip, local_port)
     resp = test_I(sock, stun_server)
     if resp is None:
         return NAT.UDP_BLOCKED
+    local_address = sock.getsockname()
+    logging.info('local address is {}:{}'.format(local_address[0], local_address[1]))
     m1 = get_mapped_address(resp)
     changed_address = get_changed_address(resp)
-    if m1 == source:
+    if m1 == local_address:
+        # we can't tell whether it's public if we don't specify the local address
         resp = test_II(sock, stun_server)
         if resp is None:
             return NAT.SYMMETRIC_UDP_FIREWALL
         return NAT.PUBLIC
     logging.info('MAPPED_ADDRESS: {}:{}'.format(m1[0], m1[1]))
-    source = m1
     resp = test_II(sock, stun_server)
     if not resp is None:
         return NAT.FULL_CONE
     resp = test_I(sock, changed_address)
-    m1 = get_mapped_address(resp)
-    logging.info('MAPPED_ADDRESS: {}:{}'.format(m1[0], m1[1]))
-    if m1 != source:
+    assert not (resp is None)
+    m2 = get_mapped_address(resp)
+    logging.info('MAPPED_ADDRESS: {}:{}'.format(m2[0], m2[1]))
+    if m2 != m1:
         return NAT.SYMMETRIC
     resp = test_III(sock, stun_server)
     if resp is None:
