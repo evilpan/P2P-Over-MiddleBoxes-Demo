@@ -140,97 +140,71 @@ class Message(object):
         return '{}: [{}]'.format(self.header,
                 ','.join(map(str, self.attributes)))
 
-class TestResult(object):
-    def __init__(self):
-        self.timeout = True
-        self.ip = '255.255.255.255'
-        self.port = 0
-    def host_same(self, host):
-        return host == (self.ip, self.port)
-
-def test_I(sock, stun_server):
-    logging.info('running test I')
-    result = TestResult()
-    binding_request = Message(header=StunHeader(type=MessageType.BINDING_REQUEST))
-    logging.debug('SEND: {}'.format(binding_request))
-    sock.sendto(binding_request.to_bytes(), stun_server)
+def send_and_recv(sock, stun_server, request):
+    logging.debug('SEND: {}'.format(request))
+    sock.sendto(request.to_bytes(), stun_server)
     try:
         data, addr = sock.recvfrom(4096)
     except socket.timeout as e:
-        return result
+        logging.debug('RECV: timeout')
+        return None
     response = Message.from_bytes(data)
     logging.debug('RECV: {}'.format(response))
-    for attr in response.attributes:
-        if attr.type is AttributeType.MAPPED_ADDRESS:
-            result.ip, result.port = attr.address
-            break
-    result.timeout = False
-    return result
+    return response
+
+
+def test_I(sock, stun_server):
+    logging.info('running test I   with {}:{}'.format(stun_server[0], stun_server[1]))
+    binding_request = Message(header=StunHeader(type=MessageType.BINDING_REQUEST))
+    return send_and_recv(sock, stun_server, binding_request)
 
 def test_II(sock, stun_server):
-    logging.info('running test II')
-    result = TestResult()
+    logging.info('running test II  with {}:{}'.format(stun_server[0], stun_server[1]))
     binding_request = Message(header=StunHeader(type=MessageType.BINDING_REQUEST))
     change = StunAttribute.change_request(True, True)
     binding_request.attributes.append(change)
-    logging.debug('SEND: {}'.format(binding_request))
-    sock.sendto(binding_request.to_bytes(), stun_server)
-    try:
-        data, addr = sock.recvfrom(4096)
-    except socket.timeout:
-        return result
-    response = Message.from_bytes(data)
-    logging.debug('RECV: {}'.format(response))
-    for attr in response.attributes:
-        if attr.type is AttributeType.MAPPED_ADDRESS:
-            result.ip, result.port = attr.address
-            break
-    result.timeout = False
-    return result
+    return send_and_recv(sock, stun_server, binding_request)
 
 def test_III(sock, stun_server):
-    logging.info('running test III')
-    result = TestResult()
+    logging.info('running test III with {}:{}'.format(stun_server[0], stun_server[1]))
     binding_request = Message(header=StunHeader(type=MessageType.BINDING_REQUEST))
     change = StunAttribute.change_request(False, True)
     binding_request.attributes.append(change)
-    logging.debug('SEND: {}'.format(binding_request))
-    sock.sendto(binding_request.to_bytes(), stun_server)
-    try:
-        data, addr = sock.recvfrom(4096)
-    except socket.timeout as e:
-        return result
-    response = Message.from_bytes(data)
-    logging.debug('RECV: {}'.format(response))
-    for attr in response.attributes:
-        if attr.type is AttributeType.MAPPED_ADDRESS:
-            result.ip, result.port = attr.address
-            break
-    result.timeout = False
-    return result
+    return send_and_recv(sock, stun_server, binding_request)
 
+def get_mapped_address(message):
+    for attr in message.attributes:
+        if attr.type is AttributeType.MAPPED_ADDRESS:
+            return attr.address
+def get_changed_address(message):
+    for attr in message.attributes:
+        if attr.type is AttributeType.CHANGED_ADDRESS:
+            return attr.address
 def test_nat(sock, stun_server, local_ip='', local_port=0):
     # Please refer to the README
     source = (local_ip, local_port)
-    ret = test_I(sock, stun_server)
-    if ret.timeout:
+    resp = test_I(sock, stun_server)
+    if resp is None:
         return NAT.UDP_BLOCKED
-    if ret.host_same(source):
-        ret = test_II(sock, stun_server)
-        if ret.timeout:
+    m1 = get_mapped_address(resp)
+    changed_address = get_changed_address(resp)
+    if m1 == source:
+        resp = test_II(sock, stun_server)
+        if resp is None:
             return NAT.SYMMETRIC_UDP_FIREWALL
         return NAT.PUBLIC
-    source = (ret.ip, ret.port)
-    logging.info('MAPPED_ADDRESS: {}:{}'.format(ret.ip, ret.port))
-    ret = test_II(sock, stun_server)
-    if not ret.timeout:
+    logging.info('MAPPED_ADDRESS: {}:{}'.format(m1[0], m1[1]))
+    source = m1
+    resp = test_II(sock, stun_server)
+    if not resp is None:
         return NAT.FULL_CONE
-    ret = test_I(sock, stun_server)
-    logging.info('MAPPED_ADDRESS: {}:{}'.format(ret.ip, ret.port))
-    if not ret.host_same(source):
+    resp = test_I(sock, changed_address)
+    m1 = get_mapped_address(resp)
+    logging.info('MAPPED_ADDRESS: {}:{}'.format(m1[0], m1[1]))
+    if m1 != source:
         return NAT.SYMMETRIC
-    ret = test_III(sock, stun_server)
-    if ret.timeout:
+    resp = test_III(sock, stun_server)
+    if resp is None:
         return NAT.PORT_RISTRICT
     else:
         return NAT.ADDR_RISTRICT
@@ -238,7 +212,6 @@ def test_nat(sock, stun_server, local_ip='', local_port=0):
 STUN_SERVERS = [
     ('stun.ekiga.net', 3478),
     ('stun.ideasip.com', 3478),
-    ('stun.softjoys.com', 3478),
     ('stun.voipbuster.com', 3478),
     ]
 
@@ -246,7 +219,8 @@ def main():
     logging.basicConfig(level=logging.INFO)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(3.0)
-    ntype = test_nat(sock, STUN_SERVERS[1])
+    # choose the fastest stun server to you
+    ntype = test_nat(sock, STUN_SERVERS[2])
     print('NAT_TYPE: ' + ntype.value)
 
 if __name__ == '__main__':

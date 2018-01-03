@@ -39,13 +39,12 @@ python3 classic_stun_client.py
 
 And the result would be similar with:
 ```
-INFO:root:running test I
-INFO:root:MAPPED_ADDRESS: 220.181.57.217:45816
-INFO:root:running test II
-INFO:root:running test I
-INFO:root:MAPPED_ADDRESS: 220.181.57.217:45816
-INFO:root:running test III
-NAT_TYPE: Port Rristrict NAT
+INFO:root:running test I with stun.ideasip.com:3478
+INFO:root:MAPPED_ADDRESS: 220.181.57.217:46208
+INFO:root:running test II with stun.ideasip.com:3478
+INFO:root:running test I with 217.116.122.138:3479
+INFO:root:MAPPED_ADDRESS: 220.181.57.217:2732
+NAT_TYPE: Symmetric NAT
 ```
 
 ## My NAT is cone NAT, but it still doesn't work
