@@ -184,8 +184,7 @@ def test_nat(sock, stun_server, local_ip='0.0.0.0'):
     resp = test_I(sock, stun_server)
     if resp is None:
         return NAT.UDP_BLOCKED
-    local_address = sock.getsockname()
-    local_address[0] = local_ip
+    local_address = local_ip, sock.getsockname()[1]
     logging.info('local address is {}:{}'.format(local_address[0], local_address[1]))
     m1 = get_mapped_address(resp)
     changed_address = get_changed_address(resp)
