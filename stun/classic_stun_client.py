@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import io
+import sys
 import struct
 import socket
 import logging
@@ -218,11 +219,15 @@ STUN_SERVERS = [
     ]
 
 def main():
+    if len(sys.argv) == 2:
+        local_ip = sys.argv[1]
+    else:
+        local_ip = '0.0.0.0'
     logging.basicConfig(level=logging.INFO)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(3.0)
     # choose the fastest stun server to you
-    ntype = test_nat(sock, STUN_SERVERS[0])
+    ntype = test_nat(sock, STUN_SERVERS[0], local_ip)
     print('NAT_TYPE: ' + ntype.value)
 
 if __name__ == '__main__':

@@ -34,7 +34,7 @@ There is a simple python script to test your NAT type using RFC3489(the classic 
 You can simply check it by running:
 ```
 cd stun
-python3 classic_stun_client.py
+python3 classic_stun_client.py [your-local-ip]
 ```
 
 And the result would be similar with:
