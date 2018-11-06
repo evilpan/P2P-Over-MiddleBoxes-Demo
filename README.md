@@ -53,11 +53,11 @@ to forward messages. You can test it by using the utils(`udp_server/udp_client`)
 
 # related post (in Chinese)
 
-- [https://www.pppan.net/blog/detail/2017-12-16-p2p-over-middle-box(up to date)][django]
-- [http://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/(original post)][jekyll]
+- [https://evilpan.com/2015/10/31/p2p-over-middle-box/][blog]
 
 > NOTE: This is just a proof of concept project. If you want to build a stable
 > P2P application, please refer to STUN/TURN and ICE protocol as well.
 
 [jekyll]:http://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/
 [django]:https://www.pppan.net/blog/detail/2017-12-16-p2p-over-middle-box
+[blog]: https://evilpan.com/2015/10/31/p2p-over-middle-box/
