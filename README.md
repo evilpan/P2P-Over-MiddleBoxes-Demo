@@ -1,43 +1,49 @@
 # P2P-Over-MiddleBoxes-Demo
-A simple demo of P2P communication over middle boxes such as NAT
+
+一个简单的P2P通信示例
+
+[English README](README_en.md)
 
 # p2pchat
 
-## build:
+一个P2P聊天程序，使用UDP打洞创建链接。
+
+## 编译
     
     make p2pchat
 
-## run:
+## 运行
 
-    ./p2pchat/server port
+    ./p2pchat/server <服务器端口号>
 
-    ./p2pchat/client server:port
+    ./p2pchat/client <服务器IP>:<服务器端口号>
     >>> help
 
-# test
+# 测试：
 
-## build:
+## 编译
 
     make test
 
-## run:
+## 运行
     
     ./run_test.sh
 
-# FAQ
+# 常见问题
 
-## It doesn't work?
+## 通信不正常/打洞不成功？
+该UDP打洞示例仅支持锥形地址转换器（Cone NAT），如果两个客户端都在同一个公网结点下，需要确保出口路由器支持**回环传输（LOOPBACK TRANSMISSION）**。
 This UDP hole punching demo only works on Cone NAT.
 
-## How to check my NAT type?
-There is a simple python script to test your NAT type using RFC3489(the classic STUN protocol) in [stun](stun).
-You can simply check it by running:
+## 我咋知道我的NAT是什么类型？
+写了个简单的Python脚本，用RFC3489（经典STUN协议）的示例来检测NAT类型，在[stun目录下](stun)。
+运行：
 ```
 cd stun
-python3 classic_stun_client.py [your-local-ip]
+python3 classic_stun_client.py [本地IP]
 ```
 
-And the result would be similar with:
+运行结果示例如下：
 ```
 INFO:root:running test I with stun.ideasip.com:3478
 INFO:root:MAPPED_ADDRESS: 220.181.57.217:46208
@@ -47,16 +53,12 @@ INFO:root:MAPPED_ADDRESS: 220.181.57.217:2732
 NAT_TYPE: Symmetric NAT
 ```
 
-## My NAT is cone NAT, but it still doesn't work
-If two of your peers are both behind the same NAT, this NAT must support `LOOPBACK TRANSMISSION`
-to forward messages. You can test it by using the utils(`udp_server/udp_client`) in [tools](tools)
 
-# related post (in Chinese)
+# 相关介绍文章
 
 - [https://evilpan.com/2015/10/31/p2p-over-middle-box/][blog]
 
-> NOTE: This is just a proof of concept project. If you want to build a stable
-> P2P application, please refer to STUN/TURN and ICE protocol as well.
+> 注: 本项目只是一个简单的UDP打洞示例，如果想构建成熟的P2P应用，可以接着参考STUN/TURN以及ICE等协议。
 
 [jekyll]:http://jekyll.pppan.net/2015/10/31/p2p-over-middle-box/
 [django]:https://www.pppan.net/blog/detail/2017-12-16-p2p-over-middle-box
