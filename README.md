@@ -33,10 +33,9 @@
 
 ## 通信不正常/打洞不成功？
 该UDP打洞示例仅支持锥形地址转换器（Cone NAT），如果两个客户端都在同一个公网结点下，需要确保出口路由器支持**回环传输（LOOPBACK TRANSMISSION）**。
-This UDP hole punching demo only works on Cone NAT.
 
 ## 我咋知道我的NAT是什么类型？
-写了个简单的Python脚本，用RFC3489（经典STUN协议）的示例来检测NAT类型，在[stun目录下](stun)。
+在[stun目录下](stun)有个简单的Python脚本，用RFC3489（经典STUN协议）的示例来检测NAT类型。
 运行：
 ```
 cd stun
