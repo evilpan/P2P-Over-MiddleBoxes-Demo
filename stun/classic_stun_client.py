@@ -51,7 +51,7 @@ class StunHeader(object):
         # 16 bits body length(excluding 20 bytes header)
         self.length = kwargs.pop('length', 0)
         # 128 bits
-        self.transactionId = kwargs.pop('transactionId', randint(0, 0xFFFFFFFFFFFFFFFF))
+        self.transactionId = kwargs.pop('transactionId', randint(0, (1 << 128) - 1))
         if len(kwargs) != 0:
             raise ValueError('unknown kwargs: {}'.format(kwargs))
     def to_bytes(self):
