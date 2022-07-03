@@ -8,7 +8,7 @@
 #define TUPLE_LEN (INET_ADDRSTRLEN + INET_PORTSTRLEN + 1)
 int ep_equal(endpoint_t lp, endpoint_t rp) {
     return ( (lp.sin_family == rp.sin_family) &&
-        (lp.sin_addr.s_addr == rp.sin_addr.s_addr) &&
+        (!strcmp(inet_ntoa(lp.sin_addr), inet_ntoa(rp.sin_addr))) &&
         (lp.sin_port == rp.sin_port) );
 }
 
